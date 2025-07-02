@@ -1,1 +1,78 @@
+# compiled output
+/dist/
+!/**/dist/
+**/node_modules
+**/uploads
+# Cross branch files
+/packages/
+riderModule.iml
+/_ReSharper.Caches/
+**/.vs
+**/bin
+**/obj
+**/*.user
+**/Logs/*
+**/.idea
+**/.env
+**/.env.docker
+**/Uploads
+#vscode
+.vscode
+
+**/obj/
+**/bin/
+
+# Ignore specific images folder
+/src/backend/ExamSystem.HttpApi/images/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+# OS
+.DS_Store
+# Tests
+/coverage
+/.nyc_output
+# IDEs and editors
 /.idea
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+#others
+**/mssql_data
+**/secrets.json
+# Compiled output
+/dist
+/tmp
+/out-tsc
+/bazel-out
+# Node
+/node_modules
+npm-debug.log
+yarn-error.log
+.idea/
+# Visual Studio Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.history/*
+# Miscellaneous
+/.angular/cache
+.sass-cache/
+/connect.lock
+/libpeerconnection.log
+testem.log
+/typings
+# System files
+Thumbs.db
+**/docker_files/
