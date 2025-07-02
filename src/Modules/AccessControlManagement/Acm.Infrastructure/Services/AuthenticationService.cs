@@ -5,50 +5,61 @@ using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using Acm.Application.Options;
+using Common.Application.Providers;
+using Common.Application.Services;
 using Konscious.Security.Cryptography;
+using Microsoft.Extensions.Options;
 
 namespace Acm.Infrastructure.Services;
 
 public class AuthenticationService : IAuthenticationService
 {
-    private readonly IUserRepository _userRepository;
-    private readonly IUserClaimRepository _userClaimRepository;
-    private readonly IRoleClaimRepository _roleClaimRepository;
-    private readonly ITenantRepository _tenantRepository;
+    private readonly LazyService<IUserRepository> _userRepository;
+    private readonly LazyService<IUserClaimRepository> _userClaimRepository;
+    private readonly LazyService<IRoleClaimRepository> _roleClaimRepository;
+    private readonly LazyService<ITenantRepository> _tenantRepository;
     private readonly IConfiguration _configuration;
+    private readonly IDateTimeProvider _dateTimeProvider;
+    private JwtOptions _jwtOptions;
 
     public AuthenticationService(
-        IUserRepository userRepository,
-        IUserClaimRepository userClaimRepository,
-        IRoleClaimRepository roleClaimRepository,
-        ITenantRepository tenantRepository,
-        IConfiguration configuration)
+        LazyService<IUserRepository> userRepository,
+        LazyService<IUserClaimRepository> userClaimRepository,
+        LazyService<IRoleClaimRepository> roleClaimRepository,
+        LazyService<ITenantRepository> tenantRepository,
+        IConfiguration configuration, 
+        IDateTimeProvider dateTimeProvider,
+        IOptions<JwtOptions> jwtOptions)
     {
         _userRepository = userRepository;
         _userClaimRepository = userClaimRepository;
         _roleClaimRepository = roleClaimRepository;
         _tenantRepository = tenantRepository;
         _configuration = configuration;
+        _dateTimeProvider = dateTimeProvider;
+        _jwtOptions = jwtOptions.Value;
     }
 
-    public async Task<AuthenticationResult> AuthenticateAsync(string email, string password, Guid tenantId, CancellationToken cancellationToken = default)
+    public async Task<AuthenticationResult> AuthenticateAsync(string email, string password, Guid tenantId,
+        CancellationToken cancellationToken = default)
     {
         // Validate tenant exists
-        var tenant = await _tenantRepository.GetByIdAsync(tenantId, cancellationToken);
+        var tenant = await _tenantRepository.Value.GetByIdAsync(tenantId, cancellationToken);
         if (tenant == null)
         {
             return AuthenticationResult.Failed("Invalid tenant");
         }
 
         // Find user
-        var user = await _userRepository.GetByEmailAsync(email, tenantId, cancellationToken);
+        var user = await _userRepository.Value.GetByEmailAsync(email, tenantId, cancellationToken);
         if (user == null)
         {
             return AuthenticationResult.Failed("Invalid credentials");
         }
 
         // Check if user is locked out
-        if (user.IsLocked && user.LockoutEnd.HasValue && user.LockoutEnd > DateTime.UtcNow)
+        if (user is { IsLocked: true, LockoutEnd: not null } && user.LockoutEnd > _dateTimeProvider.CurrentUtcTime)
         {
             return AuthenticationResult.LockedOut();
         }
@@ -59,14 +70,13 @@ public class AuthenticationService : IAuthenticationService
         {
             // Increment failed attempts
             user.AccessFailedCount++;
-            await _userRepository.SetAccessFailedCountAsync(user.Id, user.AccessFailedCount, cancellationToken);
+            await _userRepository.Value.SetAccessFailedCountAsync(user.Id, user.AccessFailedCount, cancellationToken);
 
             // Lock account if too many failed attempts
-            if (user.AccessFailedCount >= 5) // Configure this value
-            {
-                var lockoutEnd = DateTime.UtcNow.AddMinutes(30); // Configure lockout duration
-                await _userRepository.SetLockoutEndAsync(user.Id, lockoutEnd, cancellationToken);
-            }
+            if (user.AccessFailedCount < 5)
+                return AuthenticationResult.Failed("Invalid credentials"); // Configure this value
+            var lockoutEnd = _dateTimeProvider.CurrentUtcTime.AddMinutes(30); // Configure lockout duration
+            await _userRepository.Value.SetLockoutEndAsync(user.Id, lockoutEnd, cancellationToken);
 
             return AuthenticationResult.Failed("Invalid credentials");
         }
@@ -80,18 +90,18 @@ public class AuthenticationService : IAuthenticationService
         // Reset failed attempts on successful login
         if (user.AccessFailedCount > 0)
         {
-            await _userRepository.SetAccessFailedCountAsync(user.Id, 0, cancellationToken);
+            await _userRepository.Value.SetAccessFailedCountAsync(user.Id, 0, cancellationToken);
         }
 
         // Clear lockout
         if (user.IsLocked)
         {
-            await _userRepository.SetLockoutEndAsync(user.Id, null, cancellationToken);
+            await _userRepository.Value.SetLockoutEndAsync(user.Id, null, cancellationToken);
         }
 
         // Update last login
-        user.LastLoginAt = DateTime.UtcNow;
-        await _userRepository.UpdateAsync(user, cancellationToken);
+        user.LastLoginAt = _dateTimeProvider.CurrentUtcTime;
+        await _userRepository.Value.UpdateAsync(user, cancellationToken);
 
         // Get user claims
         var claims = await GetUserClaimsAsync(user.Id, cancellationToken);
@@ -99,23 +109,25 @@ public class AuthenticationService : IAuthenticationService
         // Generate JWT token
         var token = await GenerateJwtTokenAsync(user.Id, tenantId, claims, cancellationToken);
 
-        return AuthenticationResult.Success(token, user.Id);
+        return AuthenticationResult.Success(token, user.Id, _jwtOptions.AccessTokenExpiryMinutes);
     }
 
-    public async Task<string> GenerateJwtTokenAsync(Guid userId, Guid tenantId, IEnumerable<Claim> claims, CancellationToken cancellationToken = default)
+    public Task<string> GenerateJwtTokenAsync(Guid userId, Guid tenantId, IEnumerable<Claim> claims,
+        CancellationToken cancellationToken = default)
     {
-        var jwtSettings = _configuration.GetSection("Jwt");
-        var key = Encoding.UTF8.GetBytes(jwtSettings["Key"] ?? throw new InvalidOperationException("JWT key not configured"));
-        var issuer = jwtSettings["Issuer"];
-        var audience = jwtSettings["Audience"];
+        var key = Encoding.UTF8.GetBytes(_jwtOptions.Secret ??
+                                         throw new InvalidOperationException("JWT key not configured"));
+        var issuer = _jwtOptions.Issuer;
+        var audience = _jwtOptions.Audience;
 
         var tokenClaims = new List<Claim>
         {
             new(JwtRegisteredClaimNames.Sub, userId.ToString()),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-            new(JwtRegisteredClaimNames.Iat, DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(), ClaimValueTypes.Integer64),
+            new(JwtRegisteredClaimNames.Iat, DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(),
+                ClaimValueTypes.Integer64),
             new("tenant_id", tenantId.ToString()),
-            new("user_id", userId.ToString())
+            new(ClaimTypes.NameIdentifier, userId.ToString())
         };
 
         tokenClaims.AddRange(claims);
@@ -123,7 +135,7 @@ public class AuthenticationService : IAuthenticationService
         var tokenDescriptor = new SecurityTokenDescriptor
         {
             Subject = new ClaimsIdentity(tokenClaims),
-            Expires = DateTime.UtcNow.AddHours(8), // Configure token expiration
+            Expires = _dateTimeProvider.CurrentUtcTime.AddHours(_jwtOptions.AccessTokenExpiryMinutes),
             Issuer = issuer,
             Audience = audience,
             SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256)
@@ -131,7 +143,7 @@ public class AuthenticationService : IAuthenticationService
 
         var tokenHandler = new JwtSecurityTokenHandler();
         var token = tokenHandler.CreateToken(tokenDescriptor);
-        return tokenHandler.WriteToken(token);
+        return Task.FromResult(tokenHandler.WriteToken(token));
     }
 
     public async Task<IEnumerable<Claim>> GetUserClaimsAsync(Guid userId, CancellationToken cancellationToken = default)
@@ -139,12 +151,15 @@ public class AuthenticationService : IAuthenticationService
         var claims = new List<Claim>();
 
         // Get direct user claims
-        var userClaims = await _userClaimRepository.GetClaimsForUserAsync(userId, cancellationToken);
-        claims.AddRange(userClaims);
+        var userClaims = _userClaimRepository.Value.GetClaimsForUserAsync(userId, cancellationToken);
 
         // Get role-based claims
-        var roleClaims = await _roleClaimRepository.GetClaimsForUserRolesAsync(userId, cancellationToken);
-        claims.AddRange(roleClaims);
+        var roleClaims = _roleClaimRepository.Value.GetClaimsForUserRolesAsync(userId, cancellationToken);
+
+        await Task.WhenAll(userClaims, roleClaims);
+
+        claims.AddRange(userClaims.Result);
+        claims.AddRange(roleClaims.Result);
 
         return claims;
     }
@@ -183,10 +198,8 @@ public class AuthenticationService : IAuthenticationService
     {
         // Generate a random salt
         var salt = new byte[32];
-        using (var rng = System.Security.Cryptography.RandomNumberGenerator.Create())
-        {
-            rng.GetBytes(salt);
-        }
+        using var rng = System.Security.Cryptography.RandomNumberGenerator.Create();
+        rng.GetBytes(salt);
 
         // Hash the password
         using var argon2 = new Argon2id(Encoding.UTF8.GetBytes(password))

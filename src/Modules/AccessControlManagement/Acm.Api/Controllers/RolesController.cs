@@ -6,15 +6,14 @@ using Acm.Infrastructure.Authorization.Attributes;
 using Acm.Infrastructure.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
-using System.Security.Claims;
+using Common.HttpApi.Controllers;
 
 namespace Acm.Api.Controllers;
 
-[ApiController]
 [Route("api/roles")]
 [Authorize]
 [RequireTenant]
-public class RolesController : ControllerBase
+public class RolesController : JsonApiControllerBase
 {
     private readonly IRoleRepository _roleRepository;
     private readonly IRoleClaimRepository _roleClaimRepository;
@@ -30,19 +29,13 @@ public class RolesController : ControllerBase
         _userRoleRepository = userRoleRepository;
     }
 
-    private Guid GetTenantId()
-    {
-        return (Guid)HttpContext.Items["TenantId"]!;
-    }
-
     [HttpGet]
     [RequirePermission(PermissionConstants.RolesView)]
     public async Task<ActionResult<ApiResponse<IEnumerable<RoleResponse>>>> GetRoles()
     {
         try
         {
-            var tenantId = GetTenantId();
-            var roles = await _roleRepository.GetByTenantIdAsync(tenantId);
+            var roles = await _roleRepository.GetByTenantIdAsync(GetTenantId());
 
             var responses = new List<RoleResponse>();
             foreach (var role in roles)
@@ -106,10 +99,8 @@ public class RolesController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
-
             // Check if role name already exists in this tenant
-            var existingRole = await _roleRepository.GetByNameAsync(request.Name, tenantId);
+            var existingRole = await _roleRepository.GetByNameAsync(request.Name, GetTenantId());
             if (existingRole != null)
             {
                 return BadRequest(ApiResponse<RoleResponse>.ErrorResult("Role name already exists"));
@@ -119,7 +110,7 @@ public class RolesController : ControllerBase
             var role = new Role
             {
                 Id = Guid.NewGuid(),
-                TenantId = tenantId,
+                TenantId = GetTenantId(),
                 Name = request.Name,
                 Description = request.Description,
                 CreatedAt = DateTime.UtcNow
@@ -280,6 +271,8 @@ public class RolesController : ControllerBase
     [RequirePermission(PermissionConstants.RolesView)]
     public ActionResult<ApiResponse<IEnumerable<string>>> GetAvailablePermissions()
     {
+        
+        //Todo: This should ideally be fetched from a configuration or database
         var permissions = new[]
         {
             PermissionConstants.UsersView,

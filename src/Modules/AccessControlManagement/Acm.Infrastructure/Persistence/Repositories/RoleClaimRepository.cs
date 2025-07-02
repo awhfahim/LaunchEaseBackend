@@ -17,7 +17,7 @@ public class RoleClaimRepository : IRoleClaimRepository
 
     public async Task<IEnumerable<RoleClaim>> GetByRoleIdAsync(Guid roleId, CancellationToken cancellationToken = default)
     {
-        using var connection = await _connectionFactory.OpenConnectionAsync();
+        await using var connection = await _connectionFactory.OpenConnectionAsync();
         
         const string sql = @"
             SELECT id, role_id, claim_type, claim_value
@@ -29,7 +29,7 @@ public class RoleClaimRepository : IRoleClaimRepository
 
     public async Task<RoleClaim?> GetAsync(Guid roleId, string claimType, string claimValue, CancellationToken cancellationToken = default)
     {
-        using var connection = await _connectionFactory.OpenConnectionAsync();
+        await using var connection = await _connectionFactory.OpenConnectionAsync();
         
         const string sql = @"
             SELECT id, role_id, claim_type, claim_value
@@ -45,7 +45,7 @@ public class RoleClaimRepository : IRoleClaimRepository
 
     public async Task<Guid> CreateAsync(RoleClaim roleClaim, CancellationToken cancellationToken = default)
     {
-        using var connection = await _connectionFactory.OpenConnectionAsync();
+        await using var connection = await _connectionFactory.OpenConnectionAsync();
         
         const string sql = @"
             INSERT INTO role_claims (id, role_id, claim_type, claim_value)
@@ -57,7 +57,7 @@ public class RoleClaimRepository : IRoleClaimRepository
 
     public async Task UpdateAsync(RoleClaim roleClaim, CancellationToken cancellationToken = default)
     {
-        using var connection = await _connectionFactory.OpenConnectionAsync();
+        await using var connection = await _connectionFactory.OpenConnectionAsync();
         
         const string sql = @"
             UPDATE role_claims 
@@ -69,7 +69,7 @@ public class RoleClaimRepository : IRoleClaimRepository
 
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        using var connection = await _connectionFactory.OpenConnectionAsync();
+        await using var connection = await _connectionFactory.OpenConnectionAsync();
         
         const string sql = "DELETE FROM role_claims WHERE id = @Id";
         
@@ -78,7 +78,7 @@ public class RoleClaimRepository : IRoleClaimRepository
 
     public async Task DeleteAsync(Guid roleId, string claimType, string claimValue, CancellationToken cancellationToken = default)
     {
-        using var connection = await _connectionFactory.OpenConnectionAsync();
+        await using var connection = await _connectionFactory.OpenConnectionAsync();
         
         const string sql = @"
             DELETE FROM role_claims 
@@ -93,7 +93,7 @@ public class RoleClaimRepository : IRoleClaimRepository
 
     public async Task DeleteByRoleIdAsync(Guid roleId, CancellationToken cancellationToken = default)
     {
-        using var connection = await _connectionFactory.OpenConnectionAsync();
+        await using var connection = await _connectionFactory.OpenConnectionAsync();
         
         const string sql = "DELETE FROM role_claims WHERE role_id = @RoleId";
         
@@ -102,7 +102,7 @@ public class RoleClaimRepository : IRoleClaimRepository
 
     public async Task<bool> ExistsAsync(Guid roleId, string claimType, string claimValue, CancellationToken cancellationToken = default)
     {
-        using var connection = await _connectionFactory.OpenConnectionAsync();
+        await using var connection = await _connectionFactory.OpenConnectionAsync();
         
         const string sql = @"
             SELECT 1 FROM role_claims 
@@ -117,7 +117,7 @@ public class RoleClaimRepository : IRoleClaimRepository
 
     public async Task<IEnumerable<Claim>> GetClaimsForRoleAsync(Guid roleId, CancellationToken cancellationToken = default)
     {
-        using var connection = await _connectionFactory.OpenConnectionAsync();
+        await using var connection = await _connectionFactory.OpenConnectionAsync();
         
         const string sql = @"
             SELECT claim_type, claim_value
@@ -130,7 +130,7 @@ public class RoleClaimRepository : IRoleClaimRepository
 
     public async Task<IEnumerable<Claim>> GetClaimsForUserRolesAsync(Guid userId, CancellationToken cancellationToken = default)
     {
-        using var connection = await _connectionFactory.OpenConnectionAsync();
+        await using var connection = await _connectionFactory.OpenConnectionAsync();
         
         const string sql = @"
             SELECT DISTINCT rc.claim_type, rc.claim_value

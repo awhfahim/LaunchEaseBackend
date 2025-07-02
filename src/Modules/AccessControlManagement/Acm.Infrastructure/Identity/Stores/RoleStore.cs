@@ -23,7 +23,7 @@ public class RoleStore : IRoleStore<Role>, IRoleClaimStore<Role>
     {
         try
         {
-            await _roleRepository.CreateAsync(role, cancellationToken);
+            await _roleRepository.CreateAsync(role, cancellationToken: cancellationToken);
             return IdentityResult.Success;
         }
         catch (Exception ex)

@@ -1,4 +1,5 @@
-﻿using Common.Application.Options;
+﻿using Common.Application.Data;
+using Common.Application.Options;
 using Common.Application.Providers;
 using Common.Application.Services;
 using Common.Domain.CoreProviders;
@@ -20,7 +21,6 @@ public static class DependencyInjection
         services.TryAddSingleton<IStringTransformationProvider, StringTransformationProvider>();
         services.TryAddSingleton<IGuidProvider, GuidProvider>();
         services.TryAddSingleton<IDateTimeProvider, DateTimeProvider>();
-        services.TryAddSingleton<IReflectionCacheProvider, ReflectionCacheProvider>();
         
         services.BindAndValidateOptions<MinioOptions>(MinioOptions.SectionName);
         
@@ -54,6 +54,8 @@ public static class DependencyInjection
         services.TryAddSingleton<IExternalMinioService, ExternalMinioService>();
         
         services.AddScoped<IEmailService, EmailService>();
+
+        services.AddScoped<IDbConnectionFactory, PgConnectionFactory>();
 
         return services;
     }

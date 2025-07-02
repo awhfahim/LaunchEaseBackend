@@ -32,7 +32,7 @@ public class UserStore : IUserStore<User>, IUserPasswordStore<User>, IUserClaimS
     {
         try
         {
-            await _userRepository.CreateAsync(user, cancellationToken);
+            await _userRepository.CreateAsync(user, cancellationToken: cancellationToken);
             return IdentityResult.Success;
         }
         catch (Exception ex)
@@ -186,7 +186,7 @@ public class UserStore : IUserStore<User>, IUserPasswordStore<User>, IUserClaimS
                 UserId = user.Id,
                 RoleId = role.Id
             };
-            await _userRoleRepository.CreateAsync(userRole, cancellationToken);
+            await _userRoleRepository.CreateAsync(userRole, cancellationToken: cancellationToken);
         }
     }
 

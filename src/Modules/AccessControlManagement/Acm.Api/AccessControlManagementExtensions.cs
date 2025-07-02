@@ -31,10 +31,10 @@ public static class AccessControlManagementExtensions
 
         // await services.SeedStatusOfUserAsync(configuration);
         // await services.SeedAdminUserAsync(configuration);
-        services.AddJwtAuth(configuration);
+        // services.AddJwtAuth(configuration);
         
         services.RegisterSecurityManagementApplicationServices();
-        services.RegisterSecurityManagementInfrastructureServices();
+        services.RegisterSecurityManagementInfrastructureServices(configuration);
         return services;
     }
 }

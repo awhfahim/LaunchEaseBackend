@@ -19,14 +19,16 @@ public class AuthenticationResult
     public Guid? UserId { get; set; }
     public bool IsLockedOut { get; set; }
     public bool RequiresEmailConfirmation { get; set; }
+    public uint ExpiresIn { get; set; }
     
-    public static AuthenticationResult Success(string token, Guid userId)
+    public static AuthenticationResult Success(string token, Guid userId, uint expiresIn)
     {
         return new AuthenticationResult
         {
             IsSuccess = true,
             Token = token,
-            UserId = userId
+            UserId = userId,
+            ExpiresIn = expiresIn
         };
     }
     

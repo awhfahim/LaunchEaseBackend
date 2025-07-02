@@ -2,9 +2,6 @@ namespace Acm.Api.DTOs.Responses;
 
 public class LoginResponse
 {
-    public required string AccessToken { get; set; }
-    public required string TokenType { get; set; } = "Bearer";
-    public required int ExpiresIn { get; set; } // in seconds
     public required UserInfo User { get; set; }
 }
 
@@ -43,7 +40,7 @@ public class UserResponse
     public DateTime? LockoutEnd { get; set; }
     public DateTime? LastLoginAt { get; set; }
     public required DateTime CreatedAt { get; set; }
-    public required ICollection<string> Roles { get; set; }
+    public ICollection<string> Roles { get; set; } = [];
 }
 
 public class RoleResponse

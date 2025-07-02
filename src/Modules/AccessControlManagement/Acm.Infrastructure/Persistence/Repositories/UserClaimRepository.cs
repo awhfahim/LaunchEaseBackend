@@ -17,7 +17,7 @@ public class UserClaimRepository : IUserClaimRepository
 
     public async Task<IEnumerable<UserClaim>> GetByUserIdAsync(Guid userId, CancellationToken cancellationToken = default)
     {
-        using var connection = await _connectionFactory.OpenConnectionAsync();
+        await using var connection = await _connectionFactory.OpenConnectionAsync();
         
         const string sql = @"
             SELECT id, user_id, claim_type, claim_value
@@ -29,7 +29,7 @@ public class UserClaimRepository : IUserClaimRepository
 
     public async Task<UserClaim?> GetAsync(Guid userId, string claimType, string claimValue, CancellationToken cancellationToken = default)
     {
-        using var connection = await _connectionFactory.OpenConnectionAsync();
+        await using var connection = await _connectionFactory.OpenConnectionAsync();
         
         const string sql = @"
             SELECT id, user_id, claim_type, claim_value
@@ -45,7 +45,7 @@ public class UserClaimRepository : IUserClaimRepository
 
     public async Task<Guid> CreateAsync(UserClaim userClaim, CancellationToken cancellationToken = default)
     {
-        using var connection = await _connectionFactory.OpenConnectionAsync();
+        await using var connection = await _connectionFactory.OpenConnectionAsync();
         
         const string sql = @"
             INSERT INTO user_claims (id, user_id, claim_type, claim_value)
@@ -57,7 +57,7 @@ public class UserClaimRepository : IUserClaimRepository
 
     public async Task UpdateAsync(UserClaim userClaim, CancellationToken cancellationToken = default)
     {
-        using var connection = await _connectionFactory.OpenConnectionAsync();
+        await using var connection = await _connectionFactory.OpenConnectionAsync();
         
         const string sql = @"
             UPDATE user_claims 
@@ -69,7 +69,7 @@ public class UserClaimRepository : IUserClaimRepository
 
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        using var connection = await _connectionFactory.OpenConnectionAsync();
+        await using var connection = await _connectionFactory.OpenConnectionAsync();
         
         const string sql = "DELETE FROM user_claims WHERE id = @Id";
         
@@ -78,7 +78,7 @@ public class UserClaimRepository : IUserClaimRepository
 
     public async Task DeleteAsync(Guid userId, string claimType, string claimValue, CancellationToken cancellationToken = default)
     {
-        using var connection = await _connectionFactory.OpenConnectionAsync();
+        await using var connection = await _connectionFactory.OpenConnectionAsync();
         
         const string sql = @"
             DELETE FROM user_claims 
@@ -93,7 +93,7 @@ public class UserClaimRepository : IUserClaimRepository
 
     public async Task DeleteByUserIdAsync(Guid userId, CancellationToken cancellationToken = default)
     {
-        using var connection = await _connectionFactory.OpenConnectionAsync();
+        await using var connection = await _connectionFactory.OpenConnectionAsync();
         
         const string sql = "DELETE FROM user_claims WHERE user_id = @UserId";
         
@@ -102,7 +102,7 @@ public class UserClaimRepository : IUserClaimRepository
 
     public async Task<bool> ExistsAsync(Guid userId, string claimType, string claimValue, CancellationToken cancellationToken = default)
     {
-        using var connection = await _connectionFactory.OpenConnectionAsync();
+        await using var connection = await _connectionFactory.OpenConnectionAsync();
         
         const string sql = @"
             SELECT 1 FROM user_claims 
@@ -117,7 +117,7 @@ public class UserClaimRepository : IUserClaimRepository
 
     public async Task<IEnumerable<Claim>> GetClaimsForUserAsync(Guid userId, CancellationToken cancellationToken = default)
     {
-        using var connection = await _connectionFactory.OpenConnectionAsync();
+        await using var connection = await _connectionFactory.OpenConnectionAsync();
         
         const string sql = @"
             SELECT claim_type, claim_value

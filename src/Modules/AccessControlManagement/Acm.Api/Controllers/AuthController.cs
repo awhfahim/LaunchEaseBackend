@@ -1,15 +1,18 @@
+using System.Security.Claims;
 using Acm.Api.DTOs.Requests;
 using Acm.Api.DTOs.Responses;
+using Acm.Application;
 using Acm.Application.Services;
 using Acm.Application.Repositories;
+using Common.HttpApi.Controllers;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 
 namespace Acm.Api.Controllers;
 
-[ApiController]
 [Route("api/auth")]
-public class AuthController : ControllerBase
+public class AuthController : JsonApiControllerBase
 {
     private readonly IAuthenticationService _authenticationService;
     private readonly IUserRepository _userRepository;
@@ -32,20 +35,22 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("login")]
-    public async Task<ActionResult<ApiResponse<LoginResponse>>> Login([FromBody] LoginRequest request)
+    public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
         try
         {
             var result = await _authenticationService.AuthenticateAsync(
-                request.Email, 
-                request.Password, 
-                request.TenantId);
+                request.Email,
+                request.Password,
+                GetTenantId());
 
             if (!result.IsSuccess)
             {
                 if (result.IsLockedOut)
                 {
-                    return BadRequest(ApiResponse<LoginResponse>.ErrorResult("Account is temporarily locked due to multiple failed login attempts"));
+                    return BadRequest(
+                        ApiResponse<LoginResponse>.ErrorResult(
+                            "Account is temporarily locked due to multiple failed login attempts"));
                 }
 
                 if (result.RequiresEmailConfirmation)
@@ -53,7 +58,8 @@ public class AuthController : ControllerBase
                     return BadRequest(ApiResponse<LoginResponse>.ErrorResult("Email confirmation required"));
                 }
 
-                return BadRequest(ApiResponse<LoginResponse>.ErrorResult(result.ErrorMessage ?? "Authentication failed"));
+                return BadRequest(
+                    ApiResponse<LoginResponse>.ErrorResult(result.ErrorMessage ?? "Authentication failed"));
             }
 
             // Get user details for response
@@ -67,18 +73,23 @@ public class AuthController : ControllerBase
             var roles = await _userRoleRepository.GetRoleNamesForUserAsync(user.Id);
             var userClaims = await _userClaimRepository.GetClaimsForUserAsync(user.Id);
             var roleClaims = await _roleClaimRepository.GetClaimsForUserRolesAsync(user.Id);
-            
+
             var permissions = userClaims.Where(c => c.Type == "permission")
                 .Union(roleClaims.Where(c => c.Type == "permission"))
                 .Select(c => c.Value)
                 .Distinct()
                 .ToList();
 
+            HttpContext.Response.Cookies.Append(AcmAppConstants.AccessTokenCookieKey,
+                result.Token!, new CookieOptions
+                {
+                    HttpOnly = true,
+                    Expires = request.RememberMe ? DateTimeOffset.Now.AddMinutes(result.ExpiresIn) : null,
+                    Secure = true, SameSite = SameSiteMode.Strict
+                });
+
             var response = new LoginResponse
             {
-                AccessToken = result.Token!,
-                TokenType = "Bearer",
-                ExpiresIn = 8 * 60 * 60, // 8 hours in seconds
                 User = new UserInfo
                 {
                     Id = user.Id,
@@ -102,12 +113,12 @@ public class AuthController : ControllerBase
 
     [HttpPost("refresh")]
     [Authorize]
-    public async Task<ActionResult<ApiResponse<LoginResponse>>> RefreshToken()
+    public async Task<IActionResult> RefreshToken()
     {
         try
         {
             // Get user ID from claims
-            var userIdClaim = User.FindFirst("user_id")?.Value;
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             var tenantIdClaim = User.FindFirst("tenant_id")?.Value;
 
             if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId) ||
@@ -131,18 +142,23 @@ public class AuthController : ControllerBase
             var roles = await _userRoleRepository.GetRoleNamesForUserAsync(user.Id);
             var userClaims = await _userClaimRepository.GetClaimsForUserAsync(user.Id);
             var roleClaims = await _roleClaimRepository.GetClaimsForUserRolesAsync(user.Id);
-            
+
             var permissions = userClaims.Where(c => c.Type == "permission")
                 .Union(roleClaims.Where(c => c.Type == "permission"))
                 .Select(c => c.Value)
                 .Distinct()
                 .ToList();
+            
+            HttpContext.Response.Cookies.Append(AcmAppConstants.AccessTokenCookieKey,
+                newToken, new CookieOptions
+                {
+                    HttpOnly = true,
+                    Expires = DateTimeOffset.Now.AddMinutes(800),
+                    Secure = true, SameSite = SameSiteMode.Strict
+                });
 
             var response = new LoginResponse
             {
-                AccessToken = newToken,
-                TokenType = "Bearer",
-                ExpiresIn = 8 * 60 * 60, // 8 hours in seconds
                 User = new UserInfo
                 {
                     Id = user.Id,
@@ -166,7 +182,7 @@ public class AuthController : ControllerBase
 
     [HttpPost("logout")]
     [Authorize]
-    public ActionResult<ApiResponse<object>> Logout()
+    public IActionResult Logout()
     {
         // In a stateless JWT implementation, logout is handled client-side
         // However, you could implement token blacklisting here if needed
@@ -175,11 +191,11 @@ public class AuthController : ControllerBase
 
     [HttpGet("me")]
     [Authorize]
-    public async Task<ActionResult<ApiResponse<UserInfo>>> GetCurrentUser()
+    public async Task<IActionResult> GetCurrentUser()
     {
         try
         {
-            var userIdClaim = User.FindFirst("user_id")?.Value;
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
             {
                 return Unauthorized(ApiResponse<UserInfo>.ErrorResult("Invalid token"));
@@ -195,7 +211,7 @@ public class AuthController : ControllerBase
             var roles = await _userRoleRepository.GetRoleNamesForUserAsync(user.Id);
             var userClaims = await _userClaimRepository.GetClaimsForUserAsync(user.Id);
             var roleClaims = await _roleClaimRepository.GetClaimsForUserRolesAsync(user.Id);
-            
+
             var permissions = userClaims.Where(c => c.Type == "permission")
                 .Union(roleClaims.Where(c => c.Type == "permission"))
                 .Select(c => c.Value)
@@ -218,7 +234,8 @@ public class AuthController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, ApiResponse<UserInfo>.ErrorResult("An error occurred while fetching user information"));
+            return StatusCode(500,
+                ApiResponse<UserInfo>.ErrorResult("An error occurred while fetching user information"));
         }
     }
 }

@@ -2,6 +2,7 @@ using System.Text;
 using Acm.Application;
 using Acm.Application.Options;
 using Acm.Infrastructure.Persistence;
+using Common.Application.Options;
 using Common.Application.Providers;
 using Common.Domain.Enums;
 using Common.Infrastructure.Providers;
@@ -282,7 +283,7 @@ public static class ServiceCollectionExtensions
     {
         var jwtOptions = configuration.GetRequiredSection(JwtOptions.SectionName).Get<JwtOptions>();
         ArgumentNullException.ThrowIfNull(jwtOptions);
-
+    
         services.AddAuthentication(options =>
             {
                 options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -300,7 +301,7 @@ public static class ServiceCollectionExtensions
                     ValidateIssuerSigningKey = true,
                     IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.Secret))
                 };
-
+    
                 options.Events = new JwtBearerEvents
                 {
                     OnMessageReceived = context =>
@@ -310,14 +311,14 @@ public static class ServiceCollectionExtensions
                     }
                 };
             });
-
+    
         // Add authorization policies
         services.AddAuthorization(options =>
         {
             // Tenant policy - requires valid tenant claim
             options.AddPolicy("TenantPolicy", policy =>
                 policy.Requirements.Add(new Authorization.Handlers.TenantRequirement()));
-
+    
             // Permission-based policies
             var permissions = new[]
             {
@@ -326,22 +327,22 @@ public static class ServiceCollectionExtensions
                 "tenants.view", "tenants.edit",
                 "dashboard.view", "system.admin"
             };
-
+    
             foreach (var permission in permissions)
             {
                 options.AddPolicy($"Permission.{permission}", policy =>
                     policy.Requirements.Add(new Misc.PermissionRequirement(permission)));
             }
         });
-
+    
         return services;
     }
 
     public static IServiceCollection AddDatabaseConfig(this IServiceCollection services,
         IConfiguration configuration, IHostEnvironment hostEnvironment)
     {
-        var dbUrl = configuration.GetRequiredSection(AcmConnectionStringOptions.SectionName)
-            .GetValue<string>(nameof(AcmConnectionStringOptions.AcmDb));
+        var dbUrl = configuration.GetRequiredSection(ConnectionStringOptions.SectionName)
+            .GetValue<string>(nameof(ConnectionStringOptions.Db));
 
         ArgumentException.ThrowIfNullOrEmpty(dbUrl);
 
@@ -367,41 +368,41 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
-    public static async Task<IServiceCollection> MigrateAcmDbAsync(this IServiceCollection services,
-        IConfiguration configuration)
-    {
-        var dbUrl = configuration.GetRequiredSection(AcmConnectionStringOptions.SectionName)
-            .GetValue<string>(nameof(AcmConnectionStringOptions.AcmDb));
-
-        ArgumentException.ThrowIfNullOrEmpty(dbUrl);
-
-        var optionsBuilder = new DbContextOptionsBuilder<AcmDbContext>();
-        optionsBuilder.UseNpgsql(dbUrl);
-
-        await using var dbContext = new AcmDbContext(optionsBuilder.Options);
-
-        if (EF.IsDesignTime)
-        {
-            return services;
-        }
-
-        var canConnect = await dbContext.Database.CanConnectAsync();
-
-        if (canConnect is false)
-        {
-            Console.WriteLine("Connection failed from ACM");
-            return services;
-        }
-
-        var count = (await dbContext.Database.GetPendingMigrationsAsync()).Count();
-
-        Console.WriteLine("Connection Successful from ACM");
-        Console.WriteLine($"Available migrations in ACM: {count}");
-        if (count > 0)
-        {
-            await dbContext.Database.MigrateAsync();
-        }
-
-        return services;
-    }
+    // public static async Task<IServiceCollection> MigrateAcmDbAsync(this IServiceCollection services,
+    //     IConfiguration configuration)
+    // {
+    //     var dbUrl = configuration.GetRequiredSection(AcmConnectionStringOptions.SectionName)
+    //         .GetValue<string>(nameof(AcmConnectionStringOptions.AcmDb));
+    //
+    //     ArgumentException.ThrowIfNullOrEmpty(dbUrl);
+    //
+    //     var optionsBuilder = new DbContextOptionsBuilder<AcmDbContext>();
+    //     optionsBuilder.UseNpgsql(dbUrl);
+    //
+    //     await using var dbContext = new AcmDbContext(optionsBuilder.Options);
+    //
+    //     if (EF.IsDesignTime)
+    //     {
+    //         return services;
+    //     }
+    //
+    //     var canConnect = await dbContext.Database.CanConnectAsync();
+    //
+    //     if (canConnect is false)
+    //     {
+    //         Console.WriteLine("Connection failed from ACM");
+    //         return services;
+    //     }
+    //
+    //     var count = (await dbContext.Database.GetPendingMigrationsAsync()).Count();
+    //
+    //     Console.WriteLine("Connection Successful from ACM");
+    //     Console.WriteLine($"Available migrations in ACM: {count}");
+    //     if (count > 0)
+    //     {
+    //         await dbContext.Database.MigrateAsync();
+    //     }
+    //
+    //     return services;
+    // }
 }

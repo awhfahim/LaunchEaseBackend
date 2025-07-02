@@ -43,7 +43,7 @@ try
     builder.Services.BindAndValidateOptions<AppOptions>(AppOptions.SectionName);
     builder.Services.BindAndValidateOptions<JwtOptions>(JwtOptions.SectionName);
     builder.Services.BindAndValidateOptions<AdminUserSeedOptions>(AdminUserSeedOptions.SectionName);
-    builder.Services.BindAndValidateOptions<AcmConnectionStringOptions>(AcmConnectionStringOptions.SectionName);
+    builder.Services.BindAndValidateOptions<ConnectionStringOptions>(ConnectionStringOptions.SectionName);
 
     builder.Services.AddMemoryCache();
     builder.Services.AddOpenApi();

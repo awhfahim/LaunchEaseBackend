@@ -5,16 +5,18 @@ using Acm.Application.Services;
 using Acm.Domain.Entities;
 using Acm.Infrastructure.Authorization.Attributes;
 using Acm.Infrastructure.Authorization;
+using Common.HttpApi.Controllers;
+using Common.HttpApi.Others;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace Acm.Api.Controllers;
 
-[ApiController]
 [Route("api/users")]
 [Authorize]
 [RequireTenant]
-public class UsersController : ControllerBase
+public class UsersController : JsonApiControllerBase
 {
     private readonly IUserRepository _userRepository;
     private readonly IRoleRepository _roleRepository;
@@ -36,24 +38,18 @@ public class UsersController : ControllerBase
         _authenticationService = authenticationService;
     }
 
-    private Guid GetTenantId()
-    {
-        return (Guid)HttpContext.Items["TenantId"]!;
-    }
-
     [HttpGet]
     [RequirePermission(PermissionConstants.UsersView)]
-    public async Task<ActionResult<ApiResponse<IEnumerable<UserResponse>>>> GetUsers()
+    public async Task<IActionResult> GetUsers(
+        [FromQuery, BindRequired] PaginationQueryParameter pagination)
     {
         try
         {
-            var tenantId = GetTenantId();
-            var users = await _userRepository.GetByTenantIdAsync(tenantId);
-
+            var users = await _userRepository.GetByTenantIdAsync(GetTenantId(), pagination.Page, pagination.Limit);
+            
             var responses = new List<UserResponse>();
             foreach (var user in users)
             {
-                var roles = await _userRoleRepository.GetRoleNamesForUserAsync(user.Id);
                 responses.Add(new UserResponse
                 {
                     Id = user.Id,
@@ -66,8 +62,7 @@ public class UsersController : ControllerBase
                     IsLocked = user.IsLocked,
                     LockoutEnd = user.LockoutEnd,
                     LastLoginAt = user.LastLoginAt,
-                    CreatedAt = user.CreatedAt,
-                    Roles = roles.ToList()
+                    CreatedAt = user.CreatedAt
                 });
             }
 
@@ -75,23 +70,23 @@ public class UsersController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, ApiResponse<IEnumerable<UserResponse>>.ErrorResult("An error occurred while fetching users"));
+            return StatusCode(500,
+                ApiResponse<IEnumerable<UserResponse>>.ErrorResult("An error occurred while fetching users"));
         }
     }
 
     [HttpGet("{id:guid}")]
     [RequirePermission(PermissionConstants.UsersView)]
-    public async Task<ActionResult<ApiResponse<UserResponse>>> GetUser([FromRoute] Guid id)
+    public async Task<IActionResult> GetUser([FromRoute] Guid id)
     {
         try
         {
-            var user = await _userRepository.GetByIdAsync(id);
+            var user = await _userRepository.GetByIdAsync(id, HttpContext.RequestAborted);
             if (user == null || user.TenantId != GetTenantId())
             {
                 return NotFound(ApiResponse<UserResponse>.ErrorResult("User not found"));
             }
 
-            var roles = await _userRoleRepository.GetRoleNamesForUserAsync(user.Id);
             var response = new UserResponse
             {
                 Id = user.Id,
@@ -104,8 +99,7 @@ public class UsersController : ControllerBase
                 IsLocked = user.IsLocked,
                 LockoutEnd = user.LockoutEnd,
                 LastLoginAt = user.LastLoginAt,
-                CreatedAt = user.CreatedAt,
-                Roles = roles.ToList()
+                CreatedAt = user.CreatedAt
             };
 
             return Ok(ApiResponse<UserResponse>.SuccessResult(response));
@@ -118,14 +112,14 @@ public class UsersController : ControllerBase
 
     [HttpPost]
     [RequirePermission(PermissionConstants.UsersCreate)]
-    public async Task<ActionResult<ApiResponse<UserResponse>>> CreateUser([FromBody] CreateUserRequest request)
+    public async Task<IActionResult> CreateUser([FromBody] CreateUserRequest request)
     {
         try
         {
             var tenantId = GetTenantId();
-
             // Check if email already exists in this tenant
-            var existingUser = await _userRepository.GetByEmailAsync(request.Email, tenantId);
+            var existingUser =
+                await _userRepository.GetByEmailAsync(request.Email, tenantId, HttpContext.RequestAborted);
             if (existingUser != null)
             {
                 return BadRequest(ApiResponse<UserResponse>.ErrorResult("Email already exists"));
@@ -154,7 +148,7 @@ public class UsersController : ControllerBase
             // Assign roles if specified
             foreach (var roleName in request.Roles)
             {
-                var role = await _roleRepository.GetByNameAsync(roleName, tenantId);
+                var role = await _roleRepository.GetByNameAsync(roleName, tenantId, HttpContext.RequestAborted);
                 if (role != null)
                 {
                     var userRole = new UserRole
@@ -196,7 +190,8 @@ public class UsersController : ControllerBase
 
     [HttpPut("{id:guid}")]
     [RequirePermission(PermissionConstants.UsersEdit)]
-    public async Task<ActionResult<ApiResponse<UserResponse>>> UpdateUser([FromRoute] Guid id, [FromBody] UpdateUserRequest request)
+    public async Task<IActionResult> UpdateUser([FromRoute] Guid id,
+        [FromBody] UpdateUserRequest request)
     {
         try
         {
@@ -205,9 +200,10 @@ public class UsersController : ControllerBase
             {
                 return NotFound(ApiResponse<UserResponse>.ErrorResult("User not found"));
             }
-
+            
+            var tenantId = GetTenantId();
             // Check if email already exists (excluding current user)
-            var existingUser = await _userRepository.GetByEmailAsync(request.Email, GetTenantId());
+            var existingUser = await _userRepository.GetByEmailAsync(request.Email, tenantId);
             if (existingUser != null && existingUser.Id != id)
             {
                 return BadRequest(ApiResponse<UserResponse>.ErrorResult("Email already exists"));
@@ -224,7 +220,6 @@ public class UsersController : ControllerBase
 
             await _userRepository.UpdateAsync(user);
 
-            var roles = await _userRoleRepository.GetRoleNamesForUserAsync(user.Id);
             var response = new UserResponse
             {
                 Id = user.Id,
@@ -237,8 +232,7 @@ public class UsersController : ControllerBase
                 IsLocked = user.IsLocked,
                 LockoutEnd = user.LockoutEnd,
                 LastLoginAt = user.LastLoginAt,
-                CreatedAt = user.CreatedAt,
-                Roles = roles.ToList()
+                CreatedAt = user.CreatedAt
             };
 
             return Ok(ApiResponse<UserResponse>.SuccessResult(response, "User updated successfully"));
@@ -251,7 +245,7 @@ public class UsersController : ControllerBase
 
     [HttpDelete("{id:guid}")]
     [RequirePermission(PermissionConstants.UsersDelete)]
-    public async Task<ActionResult<ApiResponse<object>>> DeleteUser([FromRoute] Guid id)
+    public async Task<IActionResult> DeleteUser([FromRoute] Guid id)
     {
         try
         {
@@ -280,7 +274,8 @@ public class UsersController : ControllerBase
 
     [HttpPost("{id:guid}/roles")]
     [RequirePermission(PermissionConstants.UsersEdit)]
-    public async Task<ActionResult<ApiResponse<object>>> AssignRoles([FromRoute] Guid id, [FromBody] ICollection<string> roleNames)
+    public async Task<IActionResult> AssignRoles([FromRoute] Guid id,
+        [FromBody] ICollection<string> roleNames)
     {
         try
         {
@@ -290,25 +285,21 @@ public class UsersController : ControllerBase
                 return NotFound(ApiResponse<object>.ErrorResult("User not found"));
             }
 
-            var tenantId = GetTenantId();
-
             // Remove existing roles
             await _userRoleRepository.DeleteByUserIdAsync(id);
 
             // Assign new roles
             foreach (var roleName in roleNames)
             {
-                var role = await _roleRepository.GetByNameAsync(roleName, tenantId);
-                if (role != null)
+                var role = await _roleRepository.GetByNameAsync(roleName, GetTenantId());
+                if (role == null) continue;
+                var userRole = new UserRole
                 {
-                    var userRole = new UserRole
-                    {
-                        Id = Guid.NewGuid(),
-                        UserId = id,
-                        RoleId = role.Id
-                    };
-                    await _userRoleRepository.CreateAsync(userRole);
-                }
+                    Id = Guid.NewGuid(),
+                    UserId = id,
+                    RoleId = role.Id
+                };
+                await _userRoleRepository.CreateAsync(userRole);
             }
 
             return Ok(ApiResponse<object>.SuccessResult(null, "Roles assigned successfully"));

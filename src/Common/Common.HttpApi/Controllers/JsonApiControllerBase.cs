@@ -93,4 +93,9 @@ public abstract class JsonApiControllerBase : ControllerBase
 
         return long.TryParse(id, out var result) ? result : null;
     }
+    
+    protected Guid GetTenantId()
+    {
+        return (Guid)HttpContext.Items["TenantId"]!;
+    }
 }
