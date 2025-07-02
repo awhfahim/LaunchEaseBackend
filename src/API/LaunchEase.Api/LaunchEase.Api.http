@@ -1,0 +1,6 @@
+@LaunchEase.Api_HostAddress = http://localhost:5250
+
+GET {{LaunchEase.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

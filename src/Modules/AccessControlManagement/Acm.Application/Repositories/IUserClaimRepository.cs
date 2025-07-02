@@ -1,0 +1,17 @@
+using Acm.Domain.Entities;
+using System.Security.Claims;
+
+namespace Acm.Application.Repositories;
+
+public interface IUserClaimRepository
+{
+    Task<IEnumerable<UserClaim>> GetByUserIdAsync(Guid userId, CancellationToken cancellationToken = default);
+    Task<UserClaim?> GetAsync(Guid userId, string claimType, string claimValue, CancellationToken cancellationToken = default);
+    Task<Guid> CreateAsync(UserClaim userClaim, CancellationToken cancellationToken = default);
+    Task UpdateAsync(UserClaim userClaim, CancellationToken cancellationToken = default);
+    Task DeleteAsync(Guid id, CancellationToken cancellationToken = default);
+    Task DeleteAsync(Guid userId, string claimType, string claimValue, CancellationToken cancellationToken = default);
+    Task DeleteByUserIdAsync(Guid userId, CancellationToken cancellationToken = default);
+    Task<bool> ExistsAsync(Guid userId, string claimType, string claimValue, CancellationToken cancellationToken = default);
+    Task<IEnumerable<Claim>> GetClaimsForUserAsync(Guid userId, CancellationToken cancellationToken = default);
+}
