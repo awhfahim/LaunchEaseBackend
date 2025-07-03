@@ -19,6 +19,8 @@ public class AuthenticationService : IAuthenticationService
     private readonly LazyService<IUserClaimRepository> _userClaimRepository;
     private readonly LazyService<IRoleClaimRepository> _roleClaimRepository;
     private readonly LazyService<ITenantRepository> _tenantRepository;
+    private readonly LazyService<IUserTenantRepository> _userTenantRepository;
+    private readonly LazyService<IUserRoleRepository> _userRoleRepository;
     private readonly IConfiguration _configuration;
     private readonly IDateTimeProvider _dateTimeProvider;
     private JwtOptions _jwtOptions;
@@ -28,6 +30,8 @@ public class AuthenticationService : IAuthenticationService
         LazyService<IUserClaimRepository> userClaimRepository,
         LazyService<IRoleClaimRepository> roleClaimRepository,
         LazyService<ITenantRepository> tenantRepository,
+        LazyService<IUserTenantRepository> userTenantRepository,
+        LazyService<IUserRoleRepository> userRoleRepository,
         IConfiguration configuration, 
         IDateTimeProvider dateTimeProvider,
         IOptions<JwtOptions> jwtOptions)
@@ -36,6 +40,8 @@ public class AuthenticationService : IAuthenticationService
         _userClaimRepository = userClaimRepository;
         _roleClaimRepository = roleClaimRepository;
         _tenantRepository = tenantRepository;
+        _userTenantRepository = userTenantRepository;
+        _userRoleRepository = userRoleRepository;
         _configuration = configuration;
         _dateTimeProvider = dateTimeProvider;
         _jwtOptions = jwtOptions.Value;
@@ -51,15 +57,22 @@ public class AuthenticationService : IAuthenticationService
             return AuthenticationResult.Failed("Invalid tenant");
         }
 
-        // Find user
-        var user = await _userRepository.Value.GetByEmailAsync(email, tenantId, cancellationToken);
+        // Find user by email (global lookup)
+        var user = await _userRepository.Value.GetByEmailAsync(email, cancellationToken);
         if (user == null)
         {
             return AuthenticationResult.Failed("Invalid credentials");
         }
 
+        // Verify user is a member of this tenant
+        var isMember = await _userTenantRepository.Value.IsUserMemberOfTenantAsync(user.Id, tenantId, cancellationToken);
+        if (!isMember)
+        {
+            return AuthenticationResult.Failed("Invalid credentials");
+        }
+
         // Check if user is locked out
-        if (user is { IsLocked: true, LockoutEnd: not null } && user.LockoutEnd > _dateTimeProvider.CurrentUtcTime)
+        if (user is { IsGloballyLocked: true, GlobalLockoutEnd: not null } && user.GlobalLockoutEnd > _dateTimeProvider.CurrentUtcTime)
         {
             return AuthenticationResult.LockedOut();
         }
@@ -69,11 +82,11 @@ public class AuthenticationService : IAuthenticationService
         if (!isValidPassword)
         {
             // Increment failed attempts
-            user.AccessFailedCount++;
-            await _userRepository.Value.SetAccessFailedCountAsync(user.Id, user.AccessFailedCount, cancellationToken);
+            user.GlobalAccessFailedCount++;
+            await _userRepository.Value.SetAccessFailedCountAsync(user.Id, user.GlobalAccessFailedCount, cancellationToken);
 
             // Lock account if too many failed attempts
-            if (user.AccessFailedCount < 5)
+            if (user.GlobalAccessFailedCount < 5)
                 return AuthenticationResult.Failed("Invalid credentials"); // Configure this value
             var lockoutEnd = _dateTimeProvider.CurrentUtcTime.AddMinutes(30); // Configure lockout duration
             await _userRepository.Value.SetLockoutEndAsync(user.Id, lockoutEnd, cancellationToken);
@@ -88,13 +101,13 @@ public class AuthenticationService : IAuthenticationService
         }
 
         // Reset failed attempts on successful login
-        if (user.AccessFailedCount > 0)
+        if (user.GlobalAccessFailedCount > 0)
         {
             await _userRepository.Value.SetAccessFailedCountAsync(user.Id, 0, cancellationToken);
         }
 
         // Clear lockout
-        if (user.IsLocked)
+        if (user.IsGloballyLocked)
         {
             await _userRepository.Value.SetLockoutEndAsync(user.Id, null, cancellationToken);
         }
@@ -103,8 +116,8 @@ public class AuthenticationService : IAuthenticationService
         user.LastLoginAt = _dateTimeProvider.CurrentUtcTime;
         await _userRepository.Value.UpdateAsync(user, cancellationToken);
 
-        // Get user claims
-        var claims = await GetUserClaimsAsync(user.Id, cancellationToken);
+        // Get user claims for this tenant
+        var claims = await GetUserClaimsForTenantAsync(user.Id, tenantId, cancellationToken);
 
         // Generate JWT token
         var token = await GenerateJwtTokenAsync(user.Id, tenantId, claims, cancellationToken);
@@ -215,5 +228,164 @@ public class AuthenticationService : IAuthenticationService
         // Combine salt and hash
         var combined = Convert.ToBase64String(salt) + "$" + Convert.ToBase64String(hash);
         return Task.FromResult(combined);
+    }
+
+    // New multi-tenant authentication methods
+    
+    public async Task<InitialAuthenticationResult> AuthenticateUserAsync(string email, string password, CancellationToken cancellationToken = default)
+    {
+        // Find user by email (global lookup)
+        var user = await _userRepository.Value.GetByEmailAsync(email, cancellationToken);
+        if (user == null)
+        {
+            return InitialAuthenticationResult.Failed("Invalid credentials");
+        }
+
+        // Check if user is locked out
+        if (user is { IsGloballyLocked: true, GlobalLockoutEnd: not null } && user.GlobalLockoutEnd > _dateTimeProvider.CurrentUtcTime)
+        {
+            return InitialAuthenticationResult.LockedOut();
+        }
+
+        // Validate password
+        var isValidPassword = await ValidatePasswordAsync(password, user.PasswordHash);
+        if (!isValidPassword)
+        {
+            // Increment failed attempts
+            user.GlobalAccessFailedCount++;
+            await _userRepository.Value.SetAccessFailedCountAsync(user.Id, user.GlobalAccessFailedCount, cancellationToken);
+
+            // Lock account if too many failed attempts
+            if (user.GlobalAccessFailedCount >= 5) // Configure this value
+            {
+                var lockoutEnd = _dateTimeProvider.CurrentUtcTime.AddMinutes(30); // Configure lockout duration
+                await _userRepository.Value.SetLockoutEndAsync(user.Id, lockoutEnd, cancellationToken);
+            }
+
+            return InitialAuthenticationResult.Failed("Invalid credentials");
+        }
+
+        // Check email confirmation
+        if (!user.IsEmailConfirmed)
+        {
+            return InitialAuthenticationResult.EmailNotConfirmed();
+        }
+
+        // Reset failed attempts on successful login
+        if (user.GlobalAccessFailedCount > 0)
+        {
+            await _userRepository.Value.SetAccessFailedCountAsync(user.Id, 0, cancellationToken);
+        }
+
+        // Clear lockout
+        if (user.IsGloballyLocked)
+        {
+            await _userRepository.Value.SetLockoutEndAsync(user.Id, null, cancellationToken);
+        }
+
+        // Update last login
+        user.LastLoginAt = _dateTimeProvider.CurrentUtcTime;
+        await _userRepository.Value.UpdateAsync(user, cancellationToken);
+
+        // Get accessible tenants for this user
+        var accessibleTenants = await _userTenantRepository.Value.GetUserAccessibleTenantsAsync(user.Id, cancellationToken);
+        
+        var tenantInfos = new List<TenantInfo>();
+        foreach (var tenant in accessibleTenants)
+        {
+            // Get user roles for this tenant
+            var userRoles = await _userRoleRepository.Value.GetRoleNamesForUserAsync(user.Id, tenant.Id, cancellationToken);
+            
+            tenantInfos.Add(new TenantInfo
+            {
+                Id = tenant.Id,
+                Name = tenant.Name,
+                Slug = tenant.Slug,
+                LogoUrl = tenant.LogoUrl,
+                UserRoles = userRoles
+            });
+        }
+
+        return InitialAuthenticationResult.Success(user.Id, tenantInfos);
+    }
+
+    public async Task<TenantAuthenticationResult> AuthenticateWithTenantAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken = default)
+    {
+        // Verify user exists
+        var user = await _userRepository.Value.GetByIdAsync(userId, cancellationToken);
+        if (user == null)
+        {
+            return TenantAuthenticationResult.Failed("User not found");
+        }
+
+        // Verify tenant exists
+        var tenant = await _tenantRepository.Value.GetByIdAsync(tenantId, cancellationToken);
+        if (tenant == null)
+        {
+            return TenantAuthenticationResult.Failed("Tenant not found");
+        }
+
+        // Verify user is a member of this tenant
+        var isMember = await _userTenantRepository.Value.IsUserMemberOfTenantAsync(userId, tenantId, cancellationToken);
+        if (!isMember)
+        {
+            return TenantAuthenticationResult.Failed("User is not a member of this tenant");
+        }
+
+        // Get user claims for this tenant
+        var claims = await GetUserClaimsForTenantAsync(userId, tenantId, cancellationToken);
+
+        // Generate JWT token
+        var token = await GenerateJwtTokenAsync(userId, tenantId, claims, cancellationToken);
+
+        // Get user roles for this tenant
+        var roles = await _userRoleRepository.Value.GetRoleNamesForUserAsync(userId, tenantId, cancellationToken);
+
+        // Get permissions from claims
+        var permissions = claims
+            .Where(c => c.Type == "permission")
+            .Select(c => c.Value)
+            .Distinct()
+            .ToList();
+
+        var tenantInfo = new TenantInfo
+        {
+            Id = tenant.Id,
+            Name = tenant.Name,
+            Slug = tenant.Slug,
+            LogoUrl = tenant.LogoUrl,
+            UserRoles = roles
+        };
+
+        return TenantAuthenticationResult.Success(
+            token, 
+            userId, 
+            tenantId, 
+            _jwtOptions.AccessTokenExpiryMinutes, 
+            tenantInfo, 
+            roles, 
+            permissions);
+    }
+
+    public async Task<TenantAuthenticationResult> SwitchTenantAsync(Guid userId, Guid newTenantId, CancellationToken cancellationToken = default)
+    {
+        // Use the same logic as AuthenticateWithTenantAsync since switching is essentially re-authenticating with a new tenant
+        return await AuthenticateWithTenantAsync(userId, newTenantId, cancellationToken);
+    }
+
+    public async Task<IEnumerable<Claim>> GetUserClaimsForTenantAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken = default)
+    {
+        var claims = new List<Claim>();
+
+        // Get direct user claims for this tenant
+        var userClaims = await _userClaimRepository.Value.GetClaimsForUserAsync(userId, tenantId, cancellationToken);
+
+        // Get role-based claims for this tenant
+        var roleClaims = await _roleClaimRepository.Value.GetClaimsForUserRolesAsync(userId, tenantId, cancellationToken);
+
+        claims.AddRange(userClaims);
+        claims.AddRange(roleClaims);
+
+        return claims;
     }
 }

@@ -8,6 +8,7 @@ using Common.Application.Providers;
 using Common.HttpApi.Controllers;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace Acm.Api.Controllers;
 
@@ -132,7 +133,7 @@ public class TenantsController : JsonApiControllerBase
     }
 
     [HttpGet("{slug}")]
-    public async Task<IActionResult> GetTenantBySlug([FromRoute] string slug)
+    public async Task<IActionResult> GetTenantBySlug([FromRoute, BindRequired] string slug)
     {
         try
         {

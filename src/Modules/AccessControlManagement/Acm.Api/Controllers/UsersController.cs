@@ -5,6 +5,7 @@ using Acm.Application.Services;
 using Acm.Domain.Entities;
 using Acm.Infrastructure.Authorization.Attributes;
 using Acm.Infrastructure.Authorization;
+using Common.Application.Providers;
 using Common.HttpApi.Controllers;
 using Common.HttpApi.Others;
 using Microsoft.AspNetCore.Mvc;
@@ -23,19 +24,23 @@ public class UsersController : JsonApiControllerBase
     private readonly IUserRoleRepository _userRoleRepository;
     private readonly IUserClaimRepository _userClaimRepository;
     private readonly IAuthenticationService _authenticationService;
+    private readonly IDateTimeProvider _dateTimeProvider;
+    private readonly IGuidProvider _guidProvider;
 
     public UsersController(
         IUserRepository userRepository,
         IRoleRepository roleRepository,
         IUserRoleRepository userRoleRepository,
         IUserClaimRepository userClaimRepository,
-        IAuthenticationService authenticationService)
+        IAuthenticationService authenticationService, IDateTimeProvider dateTimeProvider, IGuidProvider guidProvider)
     {
         _userRepository = userRepository;
         _roleRepository = roleRepository;
         _userRoleRepository = userRoleRepository;
         _userClaimRepository = userClaimRepository;
         _authenticationService = authenticationService;
+        _dateTimeProvider = dateTimeProvider;
+        _guidProvider = guidProvider;
     }
 
     [HttpGet]
@@ -46,7 +51,7 @@ public class UsersController : JsonApiControllerBase
         try
         {
             var users = await _userRepository.GetByTenantIdAsync(GetTenantId(), pagination.Page, pagination.Limit);
-            
+
             var responses = new List<UserResponse>();
             foreach (var user in users)
             {
@@ -131,7 +136,7 @@ public class UsersController : JsonApiControllerBase
             // Create user
             var user = new User
             {
-                Id = Guid.NewGuid(),
+                Id = _guidProvider.SortableGuid(),
                 TenantId = tenantId,
                 Email = request.Email,
                 FirstName = request.FirstName,
@@ -140,7 +145,7 @@ public class UsersController : JsonApiControllerBase
                 SecurityStamp = Guid.NewGuid().ToString(),
                 PhoneNumber = request.PhoneNumber,
                 IsEmailConfirmed = false, // Require email confirmation
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = _dateTimeProvider.CurrentUtcTime
             };
 
             await _userRepository.CreateAsync(user);
@@ -153,7 +158,7 @@ public class UsersController : JsonApiControllerBase
                 {
                     var userRole = new UserRole
                     {
-                        Id = Guid.NewGuid(),
+                        Id = _guidProvider.SortableGuid(),
                         UserId = user.Id,
                         RoleId = role.Id
                     };
@@ -200,7 +205,7 @@ public class UsersController : JsonApiControllerBase
             {
                 return NotFound(ApiResponse<UserResponse>.ErrorResult("User not found"));
             }
-            
+
             var tenantId = GetTenantId();
             // Check if email already exists (excluding current user)
             var existingUser = await _userRepository.GetByEmailAsync(request.Email, tenantId);
@@ -295,7 +300,7 @@ public class UsersController : JsonApiControllerBase
                 if (role == null) continue;
                 var userRole = new UserRole
                 {
-                    Id = Guid.NewGuid(),
+                    Id = _guidProvider.SortableGuid(),
                     UserId = id,
                     RoleId = role.Id
                 };

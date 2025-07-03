@@ -15,4 +15,5 @@ public interface IRoleClaimRepository
     Task<bool> ExistsAsync(Guid roleId, string claimType, string claimValue, CancellationToken cancellationToken = default);
     Task<IEnumerable<Claim>> GetClaimsForRoleAsync(Guid roleId, CancellationToken cancellationToken = default);
     Task<IEnumerable<Claim>> GetClaimsForUserRolesAsync(Guid userId, CancellationToken cancellationToken = default);
+    Task<IEnumerable<Claim>> GetClaimsForUserRolesAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken = default);
 }

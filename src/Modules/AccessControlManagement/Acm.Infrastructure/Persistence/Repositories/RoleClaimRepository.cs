@@ -141,4 +141,18 @@ public class RoleClaimRepository : IRoleClaimRepository
         var results = await connection.QueryAsync<(string ClaimType, string ClaimValue)>(sql, new { UserId = userId });
         return results.Select(r => new Claim(r.ClaimType, r.ClaimValue));
     }
+
+    public async Task<IEnumerable<Claim>> GetClaimsForUserRolesAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken = default)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync();
+        
+        const string sql = @"
+            SELECT DISTINCT rc.claim_type, rc.claim_value
+            FROM role_claims rc
+            INNER JOIN user_roles ur ON rc.role_id = ur.role_id
+            WHERE ur.user_id = @UserId AND ur.tenant_id = @TenantId";
+        
+        var results = await connection.QueryAsync<(string ClaimType, string ClaimValue)>(sql, new { UserId = userId, TenantId = tenantId });
+        return results.Select(r => new Claim(r.ClaimType, r.ClaimValue));
+    }
 }

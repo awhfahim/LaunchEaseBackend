@@ -294,8 +294,8 @@ public static class ServiceCollectionExtensions
             {
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
-                    ValidateAudience = false,
-                    ValidateIssuer = false,
+                    ValidateAudience = true,
+                    ValidateIssuer = true,
                     ClockSkew = TimeSpan.Zero,
                     ValidateLifetime = true,
                     ValidateIssuerSigningKey = true,
@@ -367,42 +367,5 @@ public static class ServiceCollectionExtensions
 
         return services;
     }
-
-    // public static async Task<IServiceCollection> MigrateAcmDbAsync(this IServiceCollection services,
-    //     IConfiguration configuration)
-    // {
-    //     var dbUrl = configuration.GetRequiredSection(AcmConnectionStringOptions.SectionName)
-    //         .GetValue<string>(nameof(AcmConnectionStringOptions.AcmDb));
-    //
-    //     ArgumentException.ThrowIfNullOrEmpty(dbUrl);
-    //
-    //     var optionsBuilder = new DbContextOptionsBuilder<AcmDbContext>();
-    //     optionsBuilder.UseNpgsql(dbUrl);
-    //
-    //     await using var dbContext = new AcmDbContext(optionsBuilder.Options);
-    //
-    //     if (EF.IsDesignTime)
-    //     {
-    //         return services;
-    //     }
-    //
-    //     var canConnect = await dbContext.Database.CanConnectAsync();
-    //
-    //     if (canConnect is false)
-    //     {
-    //         Console.WriteLine("Connection failed from ACM");
-    //         return services;
-    //     }
-    //
-    //     var count = (await dbContext.Database.GetPendingMigrationsAsync()).Count();
-    //
-    //     Console.WriteLine("Connection Successful from ACM");
-    //     Console.WriteLine($"Available migrations in ACM: {count}");
-    //     if (count > 0)
-    //     {
-    //         await dbContext.Database.MigrateAsync();
-    //     }
-    //
-    //     return services;
-    // }
+    
 }

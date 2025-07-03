@@ -35,6 +35,7 @@ public static class DependencyInjection
         services.TryAddScoped<IUserClaimRepository, UserClaimRepository>();
         services.TryAddScoped<IRoleClaimRepository, RoleClaimRepository>();
         services.TryAddScoped<ITenantRepository, TenantRepository>();
+        services.TryAddScoped<IUserTenantRepository, UserTenantRepository>();
 
         // Identity Stores
         services.TryAddScoped<IUserStore<User>, UserStore>();

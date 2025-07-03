@@ -21,7 +21,7 @@ public class UserRoleRepository : IUserRoleRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync();
 
         const string sql = @"
-            SELECT id, user_id, role_id
+            SELECT id, user_id, role_id, tenant_id
             FROM user_roles 
             WHERE user_id = @UserId";
 
@@ -34,7 +34,7 @@ public class UserRoleRepository : IUserRoleRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync();
 
         const string sql = @"
-            SELECT id, user_id, role_id
+            SELECT id, user_id, role_id, tenant_id
             FROM user_roles 
             WHERE role_id = @RoleId";
 
@@ -115,5 +115,61 @@ public class UserRoleRepository : IUserRoleRepository
             WHERE ur.user_id = @UserId";
 
         return await connection.QueryAsync<string>(sql, new { UserId = userId });
+    }
+
+    public async Task<IEnumerable<UserRole>> GetByUserIdAsync(Guid userId, Guid tenantId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync();
+
+        const string sql = @"
+            SELECT id, user_id, role_id, tenant_id
+            FROM user_roles 
+            WHERE user_id = @UserId AND tenant_id = @TenantId";
+
+        return await connection.QueryAsync<UserRole>(sql, new { UserId = userId, TenantId = tenantId });
+    }
+
+    public async Task<UserRole?> GetAsync(Guid userId, Guid roleId, Guid tenantId, CancellationToken cancellationToken = default)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync();
+
+        const string sql = @"
+            SELECT id, user_id, role_id, tenant_id
+            FROM user_roles 
+            WHERE user_id = @UserId AND role_id = @RoleId AND tenant_id = @TenantId";
+
+        return await connection.QueryFirstOrDefaultAsync<UserRole>(sql, new { UserId = userId, RoleId = roleId, TenantId = tenantId });
+    }
+
+    public async Task DeleteAsync(Guid userId, Guid roleId, Guid tenantId, CancellationToken cancellationToken = default)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync();
+
+        const string sql = "DELETE FROM user_roles WHERE user_id = @UserId AND role_id = @RoleId AND tenant_id = @TenantId";
+
+        await connection.ExecuteAsync(sql, new { UserId = userId, RoleId = roleId, TenantId = tenantId });
+    }
+
+    public async Task<bool> ExistsAsync(Guid userId, Guid roleId, Guid tenantId, CancellationToken cancellationToken = default)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync();
+
+        const string sql = "SELECT 1 FROM user_roles WHERE user_id = @UserId AND role_id = @RoleId AND tenant_id = @TenantId";
+
+        return await connection.QueryFirstOrDefaultAsync<int?>(sql, new { UserId = userId, RoleId = roleId, TenantId = tenantId }) is not null;
+    }
+
+    public async Task<IEnumerable<string>> GetRoleNamesForUserAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken = default)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync();
+
+        const string sql = @"
+            SELECT r.name
+            FROM roles r
+            INNER JOIN user_roles ur ON r.id = ur.role_id
+            WHERE ur.user_id = @UserId AND ur.tenant_id = @TenantId";
+
+        return await connection.QueryAsync<string>(sql, new { UserId = userId, TenantId = tenantId });
     }
 }
