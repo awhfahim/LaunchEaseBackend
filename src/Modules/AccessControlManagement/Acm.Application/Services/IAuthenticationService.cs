@@ -14,7 +14,7 @@ public interface IAuthenticationService
     Task<string> GenerateJwtTokenAsync(Guid userId, Guid tenantId, IEnumerable<Claim> claims, CancellationToken cancellationToken = default);
     
     // Get user claims for specific tenant
-    Task<IEnumerable<Claim>> GetUserClaimsForTenantAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken = default);
+    Task<List<Claim>> GetUserClaimsForTenantAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken = default);
     
     // Utility methods
     Task<bool> ValidatePasswordAsync(string password, string hashedPassword);
@@ -24,7 +24,6 @@ public interface IAuthenticationService
     Task<TenantAuthenticationResult> SwitchTenantAsync(Guid userId, Guid newTenantId, CancellationToken cancellationToken = default);
     
     // Legacy methods for backward compatibility
-    Task<AuthenticationResult> AuthenticateAsync(string email, string password, Guid tenantId, CancellationToken cancellationToken = default);
     Task<IEnumerable<Claim>> GetUserClaimsAsync(Guid userId, CancellationToken cancellationToken = default);
 }
 
@@ -36,14 +35,17 @@ public class InitialAuthenticationResult
     public bool IsLockedOut { get; set; }
     public bool RequiresEmailConfirmation { get; set; }
     public IEnumerable<TenantInfo> AccessibleTenants { get; set; } = new List<TenantInfo>();
+
+    public string TempToken { get; set; } = string.Empty;
     
-    public static InitialAuthenticationResult Success(Guid userId, IEnumerable<TenantInfo> tenants)
+    public static InitialAuthenticationResult Success(Guid userId, IEnumerable<TenantInfo> tenants, string token)
     {
         return new InitialAuthenticationResult
         {
             IsSuccess = true,
             UserId = userId,
-            AccessibleTenants = tenants
+            AccessibleTenants = tenants,
+            TempToken = token
         };
     }
     

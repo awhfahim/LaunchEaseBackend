@@ -23,6 +23,7 @@ public class UsersController : JsonApiControllerBase
     private readonly IRoleRepository _roleRepository;
     private readonly IUserRoleRepository _userRoleRepository;
     private readonly IUserClaimRepository _userClaimRepository;
+    private readonly IUserTenantRepository _userTenantRepository;
     private readonly IAuthenticationService _authenticationService;
     private readonly IDateTimeProvider _dateTimeProvider;
     private readonly IGuidProvider _guidProvider;
@@ -32,12 +33,16 @@ public class UsersController : JsonApiControllerBase
         IRoleRepository roleRepository,
         IUserRoleRepository userRoleRepository,
         IUserClaimRepository userClaimRepository,
-        IAuthenticationService authenticationService, IDateTimeProvider dateTimeProvider, IGuidProvider guidProvider)
+        IUserTenantRepository userTenantRepository,
+        IAuthenticationService authenticationService, 
+        IDateTimeProvider dateTimeProvider, 
+        IGuidProvider guidProvider)
     {
         _userRepository = userRepository;
         _roleRepository = roleRepository;
         _userRoleRepository = userRoleRepository;
         _userClaimRepository = userClaimRepository;
+        _userTenantRepository = userTenantRepository;
         _authenticationService = authenticationService;
         _dateTimeProvider = dateTimeProvider;
         _guidProvider = guidProvider;
@@ -64,8 +69,8 @@ public class UsersController : JsonApiControllerBase
                     FullName = user.FullName,
                     PhoneNumber = user.PhoneNumber,
                     IsEmailConfirmed = user.IsEmailConfirmed,
-                    IsLocked = user.IsLocked,
-                    LockoutEnd = user.LockoutEnd,
+                    IsLocked = user.IsGloballyLocked,
+                    LockoutEnd = user.GlobalLockoutEnd,
                     LastLoginAt = user.LastLoginAt,
                     CreatedAt = user.CreatedAt
                 });
@@ -73,7 +78,7 @@ public class UsersController : JsonApiControllerBase
 
             return Ok(ApiResponse<IEnumerable<UserResponse>>.SuccessResult(responses));
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             return StatusCode(500,
                 ApiResponse<IEnumerable<UserResponse>>.ErrorResult("An error occurred while fetching users"));
@@ -86,10 +91,19 @@ public class UsersController : JsonApiControllerBase
     {
         try
         {
+            var tenantId = GetTenantId();
+            
             var user = await _userRepository.GetByIdAsync(id, HttpContext.RequestAborted);
-            if (user == null || user.TenantId != GetTenantId())
+            if (user == null)
             {
                 return NotFound(ApiResponse<UserResponse>.ErrorResult("User not found"));
+            }
+
+            // Check if user is a member of current tenant
+            var isMember = await _userTenantRepository.IsUserMemberOfTenantAsync(id, tenantId, HttpContext.RequestAborted);
+            if (!isMember)
+            {
+                return NotFound(ApiResponse<UserResponse>.ErrorResult("User not found in current tenant"));
             }
 
             var response = new UserResponse
@@ -101,15 +115,15 @@ public class UsersController : JsonApiControllerBase
                 FullName = user.FullName,
                 PhoneNumber = user.PhoneNumber,
                 IsEmailConfirmed = user.IsEmailConfirmed,
-                IsLocked = user.IsLocked,
-                LockoutEnd = user.LockoutEnd,
+                IsLocked = user.IsGloballyLocked,
+                LockoutEnd = user.GlobalLockoutEnd,
                 LastLoginAt = user.LastLoginAt,
                 CreatedAt = user.CreatedAt
             };
 
             return Ok(ApiResponse<UserResponse>.SuccessResult(response));
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             return StatusCode(500, ApiResponse<UserResponse>.ErrorResult("An error occurred while fetching user"));
         }
@@ -122,22 +136,30 @@ public class UsersController : JsonApiControllerBase
         try
         {
             var tenantId = GetTenantId();
-            // Check if email already exists in this tenant
-            var existingUser =
-                await _userRepository.GetByEmailAsync(request.Email, tenantId, HttpContext.RequestAborted);
+            
+            // Check if email already exists globally
+            var existingUser = await _userRepository.GetByEmailAsync(request.Email, HttpContext.RequestAborted);
             if (existingUser != null)
             {
-                return BadRequest(ApiResponse<UserResponse>.ErrorResult("Email already exists"));
+                // Check if user is already a member of this tenant
+                var isMember = await _userTenantRepository.IsUserMemberOfTenantAsync(existingUser.Id, tenantId, HttpContext.RequestAborted);
+                if (isMember)
+                {
+                    return BadRequest(ApiResponse<UserResponse>.ErrorResult("User already exists in this tenant"));
+                }
+                else
+                {
+                    return BadRequest(ApiResponse<UserResponse>.ErrorResult("Email already exists. Use invite functionality to add existing user to this tenant."));
+                }
             }
 
             // Hash password
             var hashedPassword = await _authenticationService.HashPasswordAsync(request.Password);
 
-            // Create user
+            // Create global user
             var user = new User
             {
                 Id = _guidProvider.SortableGuid(),
-                TenantId = tenantId,
                 Email = request.Email,
                 FirstName = request.FirstName,
                 LastName = request.LastName,
@@ -150,7 +172,20 @@ public class UsersController : JsonApiControllerBase
 
             await _userRepository.CreateAsync(user);
 
-            // Assign roles if specified
+            // Add user to current tenant
+            var userTenant = new UserTenant
+            {
+                Id = _guidProvider.SortableGuid(),
+                UserId = user.Id,
+                TenantId = tenantId,
+                IsActive = true,
+                JoinedAt = _dateTimeProvider.CurrentUtcTime,
+                InvitedBy = User.Identity?.Name ?? "System" // Current user's email or system
+            };
+
+            await _userTenantRepository.AddUserToTenantAsync(userTenant);
+
+            // Assign tenant-specific roles
             foreach (var roleName in request.Roles)
             {
                 var role = await _roleRepository.GetByNameAsync(roleName, tenantId, HttpContext.RequestAborted);
@@ -160,7 +195,8 @@ public class UsersController : JsonApiControllerBase
                     {
                         Id = _guidProvider.SortableGuid(),
                         UserId = user.Id,
-                        RoleId = role.Id
+                        RoleId = role.Id,
+                        TenantId = tenantId
                     };
                     await _userRoleRepository.CreateAsync(userRole);
                 }
@@ -175,8 +211,8 @@ public class UsersController : JsonApiControllerBase
                 FullName = user.FullName,
                 PhoneNumber = user.PhoneNumber,
                 IsEmailConfirmed = user.IsEmailConfirmed,
-                IsLocked = user.IsLocked,
-                LockoutEnd = user.LockoutEnd,
+                IsLocked = user.IsGloballyLocked,
+                LockoutEnd = user.GlobalLockoutEnd,
                 LastLoginAt = user.LastLoginAt,
                 CreatedAt = user.CreatedAt,
                 Roles = request.Roles.ToList()
@@ -187,7 +223,7 @@ public class UsersController : JsonApiControllerBase
                 new { id = user.Id },
                 ApiResponse<UserResponse>.SuccessResult(response, "User created successfully"));
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             return StatusCode(500, ApiResponse<UserResponse>.ErrorResult("An error occurred while creating user"));
         }
@@ -200,15 +236,23 @@ public class UsersController : JsonApiControllerBase
     {
         try
         {
+            var tenantId = GetTenantId();
+            
             var user = await _userRepository.GetByIdAsync(id);
-            if (user == null || user.TenantId != GetTenantId())
+            if (user == null)
             {
                 return NotFound(ApiResponse<UserResponse>.ErrorResult("User not found"));
             }
 
-            var tenantId = GetTenantId();
+            // Check if user is a member of current tenant
+            var isMember = await _userTenantRepository.IsUserMemberOfTenantAsync(id, tenantId, HttpContext.RequestAborted);
+            if (!isMember)
+            {
+                return NotFound(ApiResponse<UserResponse>.ErrorResult("User not found in current tenant"));
+            }
+            
             // Check if email already exists (excluding current user)
-            var existingUser = await _userRepository.GetByEmailAsync(request.Email, tenantId);
+            var existingUser = await _userRepository.GetByEmailAsync(request.Email, HttpContext.RequestAborted);
             if (existingUser != null && existingUser.Id != id)
             {
                 return BadRequest(ApiResponse<UserResponse>.ErrorResult("Email already exists"));
@@ -220,7 +264,7 @@ public class UsersController : JsonApiControllerBase
             user.LastName = request.LastName;
             user.PhoneNumber = request.PhoneNumber;
             user.IsEmailConfirmed = request.IsEmailConfirmed;
-            user.IsLocked = request.IsLocked;
+            user.IsGloballyLocked = request.IsLocked;
             user.UpdatedAt = DateTime.UtcNow;
 
             await _userRepository.UpdateAsync(user);
@@ -234,15 +278,15 @@ public class UsersController : JsonApiControllerBase
                 FullName = user.FullName,
                 PhoneNumber = user.PhoneNumber,
                 IsEmailConfirmed = user.IsEmailConfirmed,
-                IsLocked = user.IsLocked,
-                LockoutEnd = user.LockoutEnd,
+                IsLocked = user.IsGloballyLocked,
+                LockoutEnd = user.GlobalLockoutEnd,
                 LastLoginAt = user.LastLoginAt,
                 CreatedAt = user.CreatedAt
             };
 
             return Ok(ApiResponse<UserResponse>.SuccessResult(response, "User updated successfully"));
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             return StatusCode(500, ApiResponse<UserResponse>.ErrorResult("An error occurred while updating user"));
         }
@@ -254,24 +298,51 @@ public class UsersController : JsonApiControllerBase
     {
         try
         {
+            var tenantId = GetTenantId();
+            
             var user = await _userRepository.GetByIdAsync(id);
-            if (user == null || user.TenantId != GetTenantId())
+            if (user == null)
             {
                 return NotFound(ApiResponse<object>.ErrorResult("User not found"));
             }
 
-            // Delete user claims
-            await _userClaimRepository.DeleteByUserIdAsync(id);
+            // Check if user is a member of current tenant
+            var isMember = await _userTenantRepository.IsUserMemberOfTenantAsync(id, tenantId, HttpContext.RequestAborted);
+            if (!isMember)
+            {
+                return NotFound(ApiResponse<object>.ErrorResult("User not found in current tenant"));
+            }
 
-            // Delete user roles
-            await _userRoleRepository.DeleteByUserIdAsync(id);
+            // Get tenant-specific user claims and delete them
+            var userClaims = await _userClaimRepository.GetByUserIdAsync(id, tenantId, HttpContext.RequestAborted);
+            foreach (var claim in userClaims)
+            {
+                await _userClaimRepository.DeleteAsync(claim.UserId, claim.ClaimType, claim.ClaimValue, tenantId, HttpContext.RequestAborted);
+            }
 
-            // Delete user
-            await _userRepository.DeleteAsync(id);
+            // Get tenant-specific user roles and delete them
+            var userRoles = await _userRoleRepository.GetByUserIdAsync(id, tenantId, HttpContext.RequestAborted);
+            foreach (var userRole in userRoles)
+            {
+                await _userRoleRepository.DeleteAsync(userRole.UserId, userRole.RoleId, tenantId, HttpContext.RequestAborted);
+            }
 
-            return Ok(ApiResponse<object>.SuccessResult(null, "User deleted successfully"));
+            // Remove user from current tenant
+            await _userTenantRepository.RemoveUserFromTenantAsync(id, tenantId);
+
+            // Check if user is member of any other tenants
+            var otherTenantMemberships = await _userTenantRepository.GetUserTenantsAsync(id, HttpContext.RequestAborted);
+            
+            // If user is not a member of any tenants, delete the user globally
+            if (!otherTenantMemberships.Any())
+            {
+                await _userRepository.DeleteAsync(id);
+                return Ok(ApiResponse<object>.SuccessResult(new object(), "User removed from tenant and deleted globally (no other tenant memberships)"));
+            }
+
+            return Ok(ApiResponse<object>.SuccessResult(new object(), "User removed from current tenant"));
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             return StatusCode(500, ApiResponse<object>.ErrorResult("An error occurred while deleting user"));
         }
@@ -284,34 +355,124 @@ public class UsersController : JsonApiControllerBase
     {
         try
         {
+            var tenantId = GetTenantId();
+            
             var user = await _userRepository.GetByIdAsync(id);
-            if (user == null || user.TenantId != GetTenantId())
+            if (user == null)
             {
                 return NotFound(ApiResponse<object>.ErrorResult("User not found"));
             }
 
-            // Remove existing roles
-            await _userRoleRepository.DeleteByUserIdAsync(id);
+            // Check if user is a member of current tenant
+            var isMember = await _userTenantRepository.IsUserMemberOfTenantAsync(id, tenantId, HttpContext.RequestAborted);
+            if (!isMember)
+            {
+                return NotFound(ApiResponse<object>.ErrorResult("User not found in current tenant"));
+            }
 
-            // Assign new roles
+            // Remove existing tenant-specific roles
+            var existingRoles = await _userRoleRepository.GetByUserIdAsync(id, tenantId, HttpContext.RequestAborted);
+            foreach (var existingRole in existingRoles)
+            {
+                await _userRoleRepository.DeleteAsync(existingRole.UserId, existingRole.RoleId, tenantId, HttpContext.RequestAborted);
+            }
+
+            // Assign new tenant-specific roles
             foreach (var roleName in roleNames)
             {
-                var role = await _roleRepository.GetByNameAsync(roleName, GetTenantId());
+                var role = await _roleRepository.GetByNameAsync(roleName, tenantId);
                 if (role == null) continue;
                 var userRole = new UserRole
                 {
                     Id = _guidProvider.SortableGuid(),
                     UserId = id,
-                    RoleId = role.Id
+                    RoleId = role.Id,
+                    TenantId = tenantId
                 };
                 await _userRoleRepository.CreateAsync(userRole);
             }
 
-            return Ok(ApiResponse<object>.SuccessResult(null, "Roles assigned successfully"));
+            return Ok(ApiResponse<object>.SuccessResult(new object(), "Roles assigned successfully"));
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             return StatusCode(500, ApiResponse<object>.ErrorResult("An error occurred while assigning roles"));
+        }
+    }
+
+    [HttpPost("invite")]
+    [RequirePermission(PermissionConstants.UsersCreate)]
+    public async Task<IActionResult> InviteUser([FromBody] InviteUserRequest request)
+    {
+        try
+        {
+            var tenantId = GetTenantId();
+            
+            // Check if user exists globally
+            var existingUser = await _userRepository.GetByEmailAsync(request.Email, HttpContext.RequestAborted);
+            if (existingUser == null)
+            {
+                return BadRequest(ApiResponse<object>.ErrorResult("User with this email does not exist. Use CreateUser to create a new user."));
+            }
+
+            // Check if user is already a member of this tenant
+            var isMember = await _userTenantRepository.IsUserMemberOfTenantAsync(existingUser.Id, tenantId, HttpContext.RequestAborted);
+            if (isMember)
+            {
+                return BadRequest(ApiResponse<object>.ErrorResult("User is already a member of this tenant"));
+            }
+
+            // Add user to current tenant
+            var userTenant = new UserTenant
+            {
+                Id = _guidProvider.SortableGuid(),
+                UserId = existingUser.Id,
+                TenantId = tenantId,
+                IsActive = true,
+                JoinedAt = _dateTimeProvider.CurrentUtcTime,
+                InvitedBy = User.Identity?.Name ?? "System" // Current user's email or system
+            };
+
+            await _userTenantRepository.AddUserToTenantAsync(userTenant);
+
+            // Assign tenant-specific roles if specified
+            foreach (var roleName in request.Roles)
+            {
+                var role = await _roleRepository.GetByNameAsync(roleName, tenantId, HttpContext.RequestAborted);
+                if (role != null)
+                {
+                    var userRole = new UserRole
+                    {
+                        Id = _guidProvider.SortableGuid(),
+                        UserId = existingUser.Id,
+                        RoleId = role.Id,
+                        TenantId = tenantId
+                    };
+                    await _userRoleRepository.CreateAsync(userRole);
+                }
+            }
+
+            var response = new UserResponse
+            {
+                Id = existingUser.Id,
+                Email = existingUser.Email,
+                FirstName = existingUser.FirstName,
+                LastName = existingUser.LastName,
+                FullName = existingUser.FullName,
+                PhoneNumber = existingUser.PhoneNumber,
+                IsEmailConfirmed = existingUser.IsEmailConfirmed,
+                IsLocked = existingUser.IsGloballyLocked,
+                LockoutEnd = existingUser.GlobalLockoutEnd,
+                LastLoginAt = existingUser.LastLoginAt,
+                CreatedAt = existingUser.CreatedAt,
+                Roles = request.Roles.ToList()
+            };
+
+            return Ok(ApiResponse<UserResponse>.SuccessResult(response, "User invited to tenant successfully"));
+        }
+        catch (Exception)
+        {
+            return StatusCode(500, ApiResponse<object>.ErrorResult("An error occurred while inviting user"));
         }
     }
 }

@@ -53,7 +53,7 @@ public class UserRoleRepository : IUserRoleRepository
         return await connection.QueryFirstOrDefaultAsync<UserRole>(sql, new { UserId = userId, RoleId = roleId });
     }
 
-    public async Task<Guid> CreateAsync(UserRole userRole, DbTransaction? transaction = null,
+    public async Task<Guid> CreateAsync(UserRole userRole,
         CancellationToken cancellationToken = default)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync();
@@ -62,7 +62,7 @@ public class UserRoleRepository : IUserRoleRepository
             INSERT INTO user_roles (id, user_id, role_id)
             VALUES (@Id, @UserId, @RoleId)";
 
-        await connection.ExecuteAsync(sql, userRole, transaction: transaction);
+        await connection.ExecuteAsync(sql, userRole);
         return userRole.Id;
     }
 

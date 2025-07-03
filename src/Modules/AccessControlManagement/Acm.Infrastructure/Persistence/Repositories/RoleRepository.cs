@@ -53,7 +53,7 @@ public class RoleRepository : IRoleRepository
         return await connection.QueryAsync<Role>(sql, new { TenantId = tenantId });
     }
 
-    public async Task<Guid> CreateAsync(Role role, DbTransaction? transaction = null,
+    public async Task<Guid> CreateAsync(Role role,
         CancellationToken cancellationToken = default)
     {
         using var connection = await _connectionFactory.OpenConnectionAsync();
@@ -62,7 +62,7 @@ public class RoleRepository : IRoleRepository
             INSERT INTO roles (id, tenant_id, name, description, created_at, updated_at)
             VALUES (@Id, @TenantId, @Name, @Description, @CreatedAt, @UpdatedAt)";
 
-        await connection.ExecuteAsync(sql, role, transaction: transaction);
+        await connection.ExecuteAsync(sql, role);
         return role.Id;
     }
 

@@ -10,7 +10,7 @@ public interface IUserRoleRepository
     Task<IEnumerable<UserRole>> GetByRoleIdAsync(Guid roleId, CancellationToken cancellationToken = default);
     Task<UserRole?> GetAsync(Guid userId, Guid roleId, CancellationToken cancellationToken = default);
     Task<UserRole?> GetAsync(Guid userId, Guid roleId, Guid tenantId, CancellationToken cancellationToken = default);
-    Task<Guid> CreateAsync(UserRole userRole, DbTransaction? transaction = null,
+    Task<Guid> CreateAsync(UserRole userRole,
         CancellationToken cancellationToken = default);
     Task DeleteAsync(Guid userId, Guid roleId, CancellationToken cancellationToken = default);
     Task DeleteAsync(Guid userId, Guid roleId, Guid tenantId, CancellationToken cancellationToken = default);

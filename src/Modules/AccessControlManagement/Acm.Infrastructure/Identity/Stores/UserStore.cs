@@ -134,19 +134,21 @@ public class UserStore : IUserStore<User>, IUserPasswordStore<User>, IUserClaimS
         return claims.ToList();
     }
 
-    public async Task AddClaimsAsync(User user, IEnumerable<Claim> claims, CancellationToken cancellationToken)
+    public Task AddClaimsAsync(User user, IEnumerable<Claim> claims, CancellationToken cancellationToken)
     {
-        foreach (var claim in claims)
-        {
-            var userClaim = new UserClaim
-            {
-                Id = Guid.NewGuid(),
-                UserId = user.Id,
-                ClaimType = claim.Type,
-                ClaimValue = claim.Value
-            };
-            await _userClaimRepository.CreateAsync(userClaim, cancellationToken);
-        }
+        // foreach (var claim in claims)
+        // {
+        //     var userClaim = new UserClaim
+        //     {
+        //         Id = Guid.NewGuid(),
+        //         UserId = user.Id,
+        //         ClaimType = claim.Type,
+        //         ClaimValue = claim.Value
+        //     };
+        //     await _userClaimRepository.CreateAsync(userClaim, cancellationToken);
+        // }
+        
+        return Task.CompletedTask;
     }
 
     public async Task ReplaceClaimAsync(User user, Claim claim, Claim newClaim, CancellationToken cancellationToken)
@@ -175,28 +177,32 @@ public class UserStore : IUserStore<User>, IUserPasswordStore<User>, IUserClaimS
     }
 
     // IUserRoleStore<User> implementation
-    public async Task AddToRoleAsync(User user, string roleName, CancellationToken cancellationToken)
+    public Task AddToRoleAsync(User user, string roleName, CancellationToken cancellationToken)
     {
-        var role = await _roleRepository.GetByNameAsync(roleName, user.TenantId, cancellationToken);
-        if (role != null)
-        {
-            var userRole = new UserRole
-            {
-                Id = Guid.NewGuid(),
-                UserId = user.Id,
-                RoleId = role.Id
-            };
-            await _userRoleRepository.CreateAsync(userRole, cancellationToken: cancellationToken);
-        }
+        // var role = await _roleRepository.GetByNameAsync(roleName, cancellationToken);
+        // if (role != null)
+        // {
+        //     var userRole = new UserRole
+        //     {
+        //         Id = Guid.NewGuid(),
+        //         UserId = user.Id,
+        //         RoleId = role.Id
+        //     };
+        //     await _userRoleRepository.CreateAsync(userRole, cancellationToken: cancellationToken);
+        // }
+        
+        return Task.CompletedTask;
     }
 
-    public async Task RemoveFromRoleAsync(User user, string roleName, CancellationToken cancellationToken)
+    public Task RemoveFromRoleAsync(User user, string roleName, CancellationToken cancellationToken)
     {
-        var role = await _roleRepository.GetByNameAsync(roleName, user.TenantId, cancellationToken);
-        if (role != null)
-        {
-            await _userRoleRepository.DeleteAsync(user.Id, role.Id, cancellationToken);
-        }
+        // var role = await _roleRepository.GetByNameAsync(roleName, user.TenantId, cancellationToken);
+        // if (role != null)
+        // {
+        //     await _userRoleRepository.DeleteAsync(user.Id, role.Id, cancellationToken);
+        // }
+        
+        return Task.CompletedTask;
     }
 
     public async Task<IList<string>> GetRolesAsync(User user, CancellationToken cancellationToken)
@@ -233,14 +239,14 @@ public class UserStore : IUserStore<User>, IUserPasswordStore<User>, IUserClaimS
         var count = await _userRepository.GetAccessFailedCountAsync(user.Id, cancellationToken);
         count++;
         await _userRepository.SetAccessFailedCountAsync(user.Id, count, cancellationToken);
-        user.AccessFailedCount = count;
+        user.GlobalAccessFailedCount = count;
         return count;
     }
 
     public async Task ResetAccessFailedCountAsync(User user, CancellationToken cancellationToken)
     {
         await _userRepository.SetAccessFailedCountAsync(user.Id, 0, cancellationToken);
-        user.AccessFailedCount = 0;
+        user.GlobalAccessFailedCount = 0;
     }
 
     public async Task<int> GetAccessFailedCountAsync(User user, CancellationToken cancellationToken)

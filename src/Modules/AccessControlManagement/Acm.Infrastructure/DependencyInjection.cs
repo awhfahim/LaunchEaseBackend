@@ -2,6 +2,7 @@ using Acm.Application;
 using Acm.Application.Repositories;
 using Acm.Application.Services;
 using Acm.Domain.Entities;
+using Acm.Infrastructure.Authorization;
 using Acm.Infrastructure.Authorization.Handlers;
 using Acm.Infrastructure.Extensions;
 using Acm.Infrastructure.Identity.Stores;
@@ -27,6 +28,7 @@ public static class DependencyInjection
 
         // Authorization
         services.AddSingleton<IAuthorizationHandler, TenantAuthorizationHandler>();
+        services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
 
         // Data Access Layer - Repositories
         services.TryAddScoped<IUserRepository, UserRepository>();

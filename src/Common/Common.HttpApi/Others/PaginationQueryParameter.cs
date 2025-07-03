@@ -7,13 +7,13 @@ namespace Common.HttpApi.Others;
 public record PaginationQueryParameter
 {
     private int _limit = 10;
-    private int _page = 1;
+    private int _page = 0;
 
     [BindRequired, FromQuery, JsonPropertyName("page")]
     public int Page
     {
         get => _page;
-        set => _page = value > 0 ? value : 1;
+        set => _page = value > 0 ? value : 0;
     }
 
     [BindRequired, FromQuery, JsonPropertyName("limit")]

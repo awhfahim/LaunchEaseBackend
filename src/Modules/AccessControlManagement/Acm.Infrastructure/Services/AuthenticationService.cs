@@ -21,9 +21,8 @@ public class AuthenticationService : IAuthenticationService
     private readonly LazyService<ITenantRepository> _tenantRepository;
     private readonly LazyService<IUserTenantRepository> _userTenantRepository;
     private readonly LazyService<IUserRoleRepository> _userRoleRepository;
-    private readonly IConfiguration _configuration;
     private readonly IDateTimeProvider _dateTimeProvider;
-    private JwtOptions _jwtOptions;
+    private readonly JwtOptions _jwtOptions;
 
     public AuthenticationService(
         LazyService<IUserRepository> userRepository,
@@ -32,7 +31,6 @@ public class AuthenticationService : IAuthenticationService
         LazyService<ITenantRepository> tenantRepository,
         LazyService<IUserTenantRepository> userTenantRepository,
         LazyService<IUserRoleRepository> userRoleRepository,
-        IConfiguration configuration, 
         IDateTimeProvider dateTimeProvider,
         IOptions<JwtOptions> jwtOptions)
     {
@@ -42,87 +40,8 @@ public class AuthenticationService : IAuthenticationService
         _tenantRepository = tenantRepository;
         _userTenantRepository = userTenantRepository;
         _userRoleRepository = userRoleRepository;
-        _configuration = configuration;
         _dateTimeProvider = dateTimeProvider;
         _jwtOptions = jwtOptions.Value;
-    }
-
-    public async Task<AuthenticationResult> AuthenticateAsync(string email, string password, Guid tenantId,
-        CancellationToken cancellationToken = default)
-    {
-        // Validate tenant exists
-        var tenant = await _tenantRepository.Value.GetByIdAsync(tenantId, cancellationToken);
-        if (tenant == null)
-        {
-            return AuthenticationResult.Failed("Invalid tenant");
-        }
-
-        // Find user by email (global lookup)
-        var user = await _userRepository.Value.GetByEmailAsync(email, cancellationToken);
-        if (user == null)
-        {
-            return AuthenticationResult.Failed("Invalid credentials");
-        }
-
-        // Verify user is a member of this tenant
-        var isMember = await _userTenantRepository.Value.IsUserMemberOfTenantAsync(user.Id, tenantId, cancellationToken);
-        if (!isMember)
-        {
-            return AuthenticationResult.Failed("Invalid credentials");
-        }
-
-        // Check if user is locked out
-        if (user is { IsGloballyLocked: true, GlobalLockoutEnd: not null } && user.GlobalLockoutEnd > _dateTimeProvider.CurrentUtcTime)
-        {
-            return AuthenticationResult.LockedOut();
-        }
-
-        // Validate password
-        var isValidPassword = await ValidatePasswordAsync(password, user.PasswordHash);
-        if (!isValidPassword)
-        {
-            // Increment failed attempts
-            user.GlobalAccessFailedCount++;
-            await _userRepository.Value.SetAccessFailedCountAsync(user.Id, user.GlobalAccessFailedCount, cancellationToken);
-
-            // Lock account if too many failed attempts
-            if (user.GlobalAccessFailedCount < 5)
-                return AuthenticationResult.Failed("Invalid credentials"); // Configure this value
-            var lockoutEnd = _dateTimeProvider.CurrentUtcTime.AddMinutes(30); // Configure lockout duration
-            await _userRepository.Value.SetLockoutEndAsync(user.Id, lockoutEnd, cancellationToken);
-
-            return AuthenticationResult.Failed("Invalid credentials");
-        }
-
-        // Check email confirmation
-        if (!user.IsEmailConfirmed)
-        {
-            return AuthenticationResult.EmailNotConfirmed();
-        }
-
-        // Reset failed attempts on successful login
-        if (user.GlobalAccessFailedCount > 0)
-        {
-            await _userRepository.Value.SetAccessFailedCountAsync(user.Id, 0, cancellationToken);
-        }
-
-        // Clear lockout
-        if (user.IsGloballyLocked)
-        {
-            await _userRepository.Value.SetLockoutEndAsync(user.Id, null, cancellationToken);
-        }
-
-        // Update last login
-        user.LastLoginAt = _dateTimeProvider.CurrentUtcTime;
-        await _userRepository.Value.UpdateAsync(user, cancellationToken);
-
-        // Get user claims for this tenant
-        var claims = await GetUserClaimsForTenantAsync(user.Id, tenantId, cancellationToken);
-
-        // Generate JWT token
-        var token = await GenerateJwtTokenAsync(user.Id, tenantId, claims, cancellationToken);
-
-        return AuthenticationResult.Success(token, user.Id, _jwtOptions.AccessTokenExpiryMinutes);
     }
 
     public Task<string> GenerateJwtTokenAsync(Guid userId, Guid tenantId, IEnumerable<Claim> claims,
@@ -149,6 +68,39 @@ public class AuthenticationService : IAuthenticationService
         {
             Subject = new ClaimsIdentity(tokenClaims),
             Expires = _dateTimeProvider.CurrentUtcTime.AddHours(_jwtOptions.AccessTokenExpiryMinutes),
+            Issuer = issuer,
+            Audience = audience,
+            SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256)
+        };
+
+        var tokenHandler = new JwtSecurityTokenHandler();
+        var token = tokenHandler.CreateToken(tokenDescriptor);
+        return Task.FromResult(tokenHandler.WriteToken(token));
+    }
+    
+    private Task<string> GenerateTemporaryJwtTokenAsync(Guid userId,
+        CancellationToken cancellationToken = default)
+    {
+        var key = Encoding.UTF8.GetBytes(_jwtOptions.Secret ??
+                                         throw new InvalidOperationException("JWT key not configured"));
+        var issuer = _jwtOptions.Issuer;
+        var audience = _jwtOptions.Audience;
+
+        var tokenClaims = new List<Claim>
+        {
+            new(JwtRegisteredClaimNames.Sub, userId.ToString()),
+            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            new(JwtRegisteredClaimNames.Iat, DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(),
+                ClaimValueTypes.Integer64),
+            new(ClaimTypes.NameIdentifier, userId.ToString()),
+            new ("tenant_id", Guid.NewGuid().ToString()) 
+        };
+
+
+        var tokenDescriptor = new SecurityTokenDescriptor
+        {
+            Subject = new ClaimsIdentity(tokenClaims),
+            Expires = _dateTimeProvider.CurrentUtcTime.AddMinutes(5),
             Issuer = issuer,
             Audience = audience,
             SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256)
@@ -246,8 +198,7 @@ public class AuthenticationService : IAuthenticationService
         {
             return InitialAuthenticationResult.LockedOut();
         }
-
-        // Validate password
+        
         var isValidPassword = await ValidatePasswordAsync(password, user.PasswordHash);
         if (!isValidPassword)
         {
@@ -256,16 +207,15 @@ public class AuthenticationService : IAuthenticationService
             await _userRepository.Value.SetAccessFailedCountAsync(user.Id, user.GlobalAccessFailedCount, cancellationToken);
 
             // Lock account if too many failed attempts
-            if (user.GlobalAccessFailedCount >= 5) // Configure this value
+            if (user.GlobalAccessFailedCount >= 7)
             {
-                var lockoutEnd = _dateTimeProvider.CurrentUtcTime.AddMinutes(30); // Configure lockout duration
+                var lockoutEnd = _dateTimeProvider.CurrentUtcTime.AddMinutes(30);
                 await _userRepository.Value.SetLockoutEndAsync(user.Id, lockoutEnd, cancellationToken);
             }
 
             return InitialAuthenticationResult.Failed("Invalid credentials");
         }
-
-        // Check email confirmation
+        
         if (!user.IsEmailConfirmed)
         {
             return InitialAuthenticationResult.EmailNotConfirmed();
@@ -305,8 +255,10 @@ public class AuthenticationService : IAuthenticationService
                 UserRoles = userRoles
             });
         }
+        
+        var token = await GenerateTemporaryJwtTokenAsync(user.Id, cancellationToken);
 
-        return InitialAuthenticationResult.Success(user.Id, tenantInfos);
+        return InitialAuthenticationResult.Success(user.Id, tenantInfos, token);
     }
 
     public async Task<TenantAuthenticationResult> AuthenticateWithTenantAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken = default)
@@ -348,13 +300,14 @@ public class AuthenticationService : IAuthenticationService
             .Distinct()
             .ToList();
 
+        var userRoles = roles as string[] ?? roles.ToArray();
         var tenantInfo = new TenantInfo
         {
             Id = tenant.Id,
             Name = tenant.Name,
             Slug = tenant.Slug,
             LogoUrl = tenant.LogoUrl,
-            UserRoles = roles
+            UserRoles = userRoles
         };
 
         return TenantAuthenticationResult.Success(
@@ -363,7 +316,7 @@ public class AuthenticationService : IAuthenticationService
             tenantId, 
             _jwtOptions.AccessTokenExpiryMinutes, 
             tenantInfo, 
-            roles, 
+            userRoles, 
             permissions);
     }
 
@@ -373,18 +326,20 @@ public class AuthenticationService : IAuthenticationService
         return await AuthenticateWithTenantAsync(userId, newTenantId, cancellationToken);
     }
 
-    public async Task<IEnumerable<Claim>> GetUserClaimsForTenantAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken = default)
+    public async Task<List<Claim>> GetUserClaimsForTenantAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken = default)
     {
         var claims = new List<Claim>();
 
         // Get direct user claims for this tenant
-        var userClaims = await _userClaimRepository.Value.GetClaimsForUserAsync(userId, tenantId, cancellationToken);
+        var userClaims = _userClaimRepository.Value.GetClaimsForUserAsync(userId, tenantId, cancellationToken);
 
         // Get role-based claims for this tenant
-        var roleClaims = await _roleClaimRepository.Value.GetClaimsForUserRolesAsync(userId, tenantId, cancellationToken);
+        var roleClaims = _roleClaimRepository.Value.GetClaimsForUserRolesAsync(userId, tenantId, cancellationToken);
+        
+        await Task.WhenAll(userClaims, roleClaims);
 
-        claims.AddRange(userClaims);
-        claims.AddRange(roleClaims);
+        claims.AddRange(userClaims.Result);
+        claims.AddRange(roleClaims.Result);
 
         return claims;
     }

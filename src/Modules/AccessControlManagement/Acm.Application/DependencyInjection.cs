@@ -1,3 +1,4 @@
+using Acm.Application.Services;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -9,6 +10,7 @@ public static class DependencyInjection
         this IServiceCollection services)
     {
         services.AddValidatorsFromAssemblyContaining(typeof(DependencyInjection));
+        services.AddScoped<ITenantService, TenantService>();
         return services;
     }
 }

@@ -273,22 +273,62 @@ public class RolesController : JsonApiControllerBase
     {
         
         //Todo: This should ideally be fetched from a configuration or database
-        var permissions = new[]
-        {
-            PermissionConstants.UsersView,
-            PermissionConstants.UsersCreate,
-            PermissionConstants.UsersEdit,
-            PermissionConstants.UsersDelete,
-            PermissionConstants.RolesView,
-            PermissionConstants.RolesCreate,
-            PermissionConstants.RolesEdit,
-            PermissionConstants.RolesDelete,
-            PermissionConstants.TenantsView,
-            PermissionConstants.TenantsEdit,
-            PermissionConstants.DashboardView,
-            PermissionConstants.SystemAdmin
-        };
-
+       var permissions = new[]
+       {
+           // User Management (Tenant-scoped)
+           PermissionConstants.UsersView,
+           PermissionConstants.UsersCreate,
+           PermissionConstants.UsersEdit,
+           PermissionConstants.UsersDelete,
+       
+           // Role Management (Tenant-scoped)
+           PermissionConstants.RolesView,
+           PermissionConstants.RolesCreate,
+           PermissionConstants.RolesEdit,
+           PermissionConstants.RolesDelete,
+       
+           // Tenant Settings (Own tenant only)
+           PermissionConstants.TenantSettingsView,
+           PermissionConstants.TenantSettingsEdit,
+       
+           // Dashboard (Tenant-scoped)
+           PermissionConstants.DashboardView,
+       
+           // Authentication & Authorization (Tenant-scoped)
+           PermissionConstants.AuthenticationView,
+           PermissionConstants.AuthenticationEdit,
+           PermissionConstants.AuthorizationView,
+           PermissionConstants.AuthorizationEdit,
+       
+           // SYSTEM-WIDE PERMISSIONS
+           // Global Tenant Management
+           PermissionConstants.GlobalTenantsView,
+           PermissionConstants.GlobalTenantsCreate,
+           PermissionConstants.GlobalTenantsEdit,
+           PermissionConstants.GlobalTenantsDelete,
+       
+           // Global User Management (Cross-tenant)
+           PermissionConstants.GlobalUsersView,
+           PermissionConstants.GlobalUsersCreate,
+           PermissionConstants.GlobalUsersEdit,
+           PermissionConstants.GlobalUsersDelete,
+       
+           // Global Role Management (Cross-tenant)
+           PermissionConstants.GlobalRolesView,
+           PermissionConstants.GlobalRolesCreate,
+           PermissionConstants.GlobalRolesEdit,
+           PermissionConstants.GlobalRolesDelete,
+       
+           // System Administration
+           PermissionConstants.SystemAdmin,
+           PermissionConstants.SystemDashboard,
+           PermissionConstants.SystemLogs,
+           PermissionConstants.SystemConfiguration,
+       
+           // BUSINESS OWNER PERMISSIONS
+           PermissionConstants.BusinessOwner,
+           PermissionConstants.CrossTenantAccess
+       };
         return Ok(ApiResponse<IEnumerable<string>>.SuccessResult(permissions));
     }
 }

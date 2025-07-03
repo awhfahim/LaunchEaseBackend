@@ -11,7 +11,7 @@ public interface IUserRepository
     Task<IEnumerable<User>> GetByTenantIdAsync(Guid tenantId, int page, int limit,
         CancellationToken cancellationToken = default);
 
-    Task<Guid> CreateAsync(User user, DbTransaction? transaction = null, CancellationToken cancellationToken = default);
+    Task<Guid> CreateAsync(User user, CancellationToken cancellationToken = default);
     Task UpdateAsync(User user, CancellationToken cancellationToken = default);
     Task DeleteAsync(Guid id, CancellationToken cancellationToken = default);
     Task<bool> ExistsAsync(Guid id, CancellationToken cancellationToken = default);

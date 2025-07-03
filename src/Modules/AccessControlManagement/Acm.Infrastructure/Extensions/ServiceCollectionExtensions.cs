@@ -1,6 +1,7 @@
 using System.Text;
 using Acm.Application;
 using Acm.Application.Options;
+using Acm.Infrastructure.Authorization;
 using Acm.Infrastructure.Persistence;
 using Common.Application.Options;
 using Common.Application.Providers;
@@ -295,7 +296,9 @@ public static class ServiceCollectionExtensions
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidateAudience = true,
+                    ValidAudience = jwtOptions.Audience,
                     ValidateIssuer = true,
+                    ValidIssuer = jwtOptions.Issuer,
                     ClockSkew = TimeSpan.Zero,
                     ValidateLifetime = true,
                     ValidateIssuerSigningKey = true,
@@ -331,7 +334,7 @@ public static class ServiceCollectionExtensions
             foreach (var permission in permissions)
             {
                 options.AddPolicy($"Permission.{permission}", policy =>
-                    policy.Requirements.Add(new Misc.PermissionRequirement(permission)));
+                    policy.Requirements.Add(new PermissionRequirement(permission)));
             }
         });
     

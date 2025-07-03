@@ -61,7 +61,7 @@ public class UserRepository : IUserRepository
         return await connection.QueryAsync<User>(sql, new { TenantId = tenantId, Page = page, Limit = limit });
     }
 
-    public async Task<Guid> CreateAsync(User user, DbTransaction? transaction = null,
+    public async Task<Guid> CreateAsync(User user,
         CancellationToken cancellationToken = default)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync();
@@ -74,7 +74,7 @@ public class UserRepository : IUserRepository
                     @IsEmailConfirmed, @IsGloballyLocked, @GlobalLockoutEnd, @GlobalAccessFailedCount, 
                     @LastLoginAt, @PhoneNumber, @IsPhoneNumberConfirmed, @CreatedAt, @UpdatedAt)";
 
-        await connection.ExecuteAsync(sql, user, transaction: transaction);
+        await connection.ExecuteAsync(sql, user);
         return user.Id;
     }
 
