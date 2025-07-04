@@ -1,14 +1,12 @@
 using System.Text;
 using Acm.Application;
 using Acm.Application.Options;
+using Acm.Domain.Entities;
 using Acm.Infrastructure.Authorization;
 using Acm.Infrastructure.Persistence;
 using Common.Application.Options;
-using Common.Application.Providers;
-using Common.Domain.Enums;
 using Common.Infrastructure.Providers;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -111,40 +109,40 @@ public static class ServiceCollectionExtensions
     //     return services;
     // }
     //
-    // public static async Task<IServiceCollection> SeedPermissionsAsync(this IServiceCollection services,
-    //     IConfiguration configuration)
-    // {
-    //     var dbUrl = configuration.GetRequiredSection(AcmConnectionStringOptions.SectionName)
-    //         .GetValue<string>(nameof(AcmConnectionStringOptions.AcmDb));
-    //
-    //     var dateTimeProvider = new DateTimeProvider();
-    //
-    //     var optionsBuilder = new DbContextOptionsBuilder<AcmDbContext>()
-    //         .UseNpgsql(dbUrl);
-    //
-    //     await using var dbContext = new AcmDbContext(optionsBuilder.Options);
-    //
-    //     if (await CheckBeforeSeed(dbContext) is false)
-    //     {
-    //         return services;
-    //     }
-    //
-    //     await using var transaction = await dbContext.Database.BeginTransactionAsync();
-    //     try
-    //     {
-    //         await InsertPermissions(dbContext, dateTimeProvider);
-    //         await SeedAdminUserPermissionAsync(dbContext, configuration, dateTimeProvider);
-    //         await transaction.CommitAsync();
-    //     }
-    //     catch (Exception error)
-    //     {
-    //         Console.WriteLine(error);
-    //         await transaction.RollbackAsync();
-    //     }
-    //
-    //     return services;
-    // }
-    //
+    public static async Task<IServiceCollection> SeedPermissionsAsync(this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        var dbUrl = configuration.GetRequiredSection(ConnectionStringOptions.SectionName)
+            .GetValue<string>(nameof(ConnectionStringOptions.Db));
+    
+        var dateTimeProvider = new DateTimeProvider();
+    
+        var optionsBuilder = new DbContextOptionsBuilder<AcmDbContext>()
+            .UseNpgsql(dbUrl);
+    
+        await using var dbContext = new AcmDbContext(optionsBuilder.Options);
+    
+        if (await CheckBeforeSeed(dbContext) is false)
+        {
+            return services;
+        }
+    
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        try
+        {
+            await InsertPermissions(dbContext, dateTimeProvider);
+            // await SeedAdminUserPermissionAsync(dbContext, configuration, dateTimeProvider);
+            await transaction.CommitAsync();
+        }
+        catch (Exception error)
+        {
+            Console.WriteLine(error);
+            await transaction.RollbackAsync();
+        }
+    
+        return services;
+    }
+    
     // private static async Task<bool> SeedAdminUserPermissionAsync(AcmDbContext dbContext,
     //     IConfiguration configuration, IDateTimeProvider dateTimeProvider)
     // {
@@ -233,51 +231,63 @@ public static class ServiceCollectionExtensions
     //     return true;
     // }
     //
-    // private static async Task<bool> CheckBeforeSeed(AcmDbContext dbContext)
-    // {
-    //     if (EF.IsDesignTime)
-    //     {
-    //         return false;
-    //     }
-    //
-    //     var canConnect = await dbContext.Database.CanConnectAsync();
-    //
-    //     if (canConnect is false)
-    //     {
-    //         return false;
-    //     }
-    //
-    //     var pendingMigrations = await dbContext.Database.GetPendingMigrationsAsync();
-    //
-    //     return pendingMigrations.Any() is false;
-    // }
-    //
-    // private static async Task InsertPermissions(AcmDbContext dbContext, DateTimeProvider dateTimeProvider)
-    // {
-    //     if (EF.IsDesignTime)
-    //     {
-    //         return;
-    //     }
-    //
-    //     var permissions = Enum.GetNames<MatchablePermission>();
-    //
-    //     var existingPermissions = await dbContext.AuthorizablePermissions
-    //         .Where(e => permissions.Contains(e.Name))
-    //         .Select(x => x.Name)
-    //         .AsNoTracking()
-    //         .ToListAsync();
-    //
-    //     var insertablePermissions = permissions
-    //         .Where(e => existingPermissions.Contains(e) is false)
-    //         .Select(elem => new AuthorizablePermission
-    //         {
-    //             Name = elem, CreatedAtUtc = dateTimeProvider.CurrentUtcTime,
-    //         })
-    //         .ToList();
-    //
-    //     await dbContext.AuthorizablePermissions.AddRangeAsync(insertablePermissions);
-    //     await dbContext.SaveChangesAsync();
-    // }
+    private static async Task<bool> CheckBeforeSeed(AcmDbContext dbContext)
+    {
+        if (EF.IsDesignTime)
+        {
+            return false;
+        }
+    
+        var canConnect = await dbContext.Database.CanConnectAsync();
+    
+        if (canConnect is false)
+        {
+            return false;
+        }
+    
+        var pendingMigrations = await dbContext.Database.GetPendingMigrationsAsync();
+    
+        return pendingMigrations.Any() is false;
+    }
+    
+    private static async Task InsertPermissions(AcmDbContext dbContext, DateTimeProvider dateTimeProvider)
+    {
+        if (EF.IsDesignTime)
+        {
+            return;
+        }
+    
+        var permissions = typeof(PermissionConstants)
+            .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+            .Where(f => f.FieldType == typeof(string))
+            .Select(f => (string)f.GetValue(null)!)
+            .ToList();
+    
+        var existingPermissions = await dbContext.MasterClaims
+            .Where(e => permissions.Contains(e.ClaimValue))
+            .Select(x => x.ClaimValue)
+            .AsNoTracking()
+            .ToListAsync();
+    
+        var insertablePermissions = permissions
+            .Where(e => existingPermissions.Contains(e) is false)
+            .Select(elem => new MasterClaim()
+            {
+                ClaimType = "permission",
+                ClaimValue = elem,
+                DisplayName = elem.Replace('.', ' ').ToUpperInvariant(),
+                Description = $"Permission for {elem.Replace('.', ' ')}",
+                Category = "General",
+                IsTenantScoped = true,
+                IsSystemPermission = false,
+                CreatedAt = dateTimeProvider.CurrentUtcTime,
+                UpdatedAt = null
+            })
+            .ToList();
+        
+        await dbContext.MasterClaims.AddRangeAsync(insertablePermissions);
+        await dbContext.SaveChangesAsync();
+    }
 
     public static IServiceCollection AddJwtAuth(this IServiceCollection services,
         IConfiguration configuration)
@@ -323,13 +333,11 @@ public static class ServiceCollectionExtensions
                 policy.Requirements.Add(new Authorization.Handlers.TenantRequirement()));
     
             // Permission-based policies
-            var permissions = new[]
-            {
-                "users.view", "users.create", "users.edit", "users.delete",
-                "roles.view", "roles.create", "roles.edit", "roles.delete",
-                "tenants.view", "tenants.edit",
-                "dashboard.view", "system.admin"
-            };
+            var permissions = typeof(PermissionConstants)
+                .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+                .Where(f => f.FieldType == typeof(string))
+                .Select(f => (string)f.GetValue(null)!)
+                .ToList();
     
             foreach (var permission in permissions)
             {

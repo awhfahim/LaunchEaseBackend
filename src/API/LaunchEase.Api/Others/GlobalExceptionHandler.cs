@@ -6,8 +6,6 @@ using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using System.Security;
 using System.Security.Authentication;
-using System.Text.Json;
-using Common.HttpApi.Others;
 using Acm.Api.DTOs.Responses;
 using Acm.Infrastructure.Authorization.Exceptions;
 

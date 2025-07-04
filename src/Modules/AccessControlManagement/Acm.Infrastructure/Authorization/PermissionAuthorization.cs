@@ -99,12 +99,15 @@ public static class PermissionConstants
     public const string UsersCreate = "users.create";
     public const string UsersEdit = "users.edit";
     public const string UsersDelete = "users.delete";
+    public const string UsersManageRoles = "users.manage.roles";
 
     // Role Management (Tenant-scoped)
     public const string RolesView = "roles.view";
     public const string RolesCreate = "roles.create";
     public const string RolesEdit = "roles.edit";
     public const string RolesDelete = "roles.delete";
+    public const string RolesManagePermissions = "roles.manage.permissions";
+    
 
     // Tenant Settings (Own tenant only)
     public const string TenantSettingsView = "tenant.settings.view";

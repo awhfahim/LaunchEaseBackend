@@ -11,10 +11,6 @@
       <ProjectReference Include="..\Acm.Application\Acm.Application.csproj" />
       <ProjectReference Include="..\Acm.Infrastructure\Acm.Infrastructure.csproj" />
     </ItemGroup>
-
-    <ItemGroup>
-      <Folder Include="Controllers\" />
-    </ItemGroup>
     
 
 </Project>

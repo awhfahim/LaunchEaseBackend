@@ -20,4 +20,7 @@ public interface IUserRoleRepository
     Task<bool> ExistsAsync(Guid userId, Guid roleId, Guid tenantId, CancellationToken cancellationToken = default);
     Task<IEnumerable<string>> GetRoleNamesForUserAsync(Guid userId, CancellationToken cancellationToken = default);
     Task<IEnumerable<string>> GetRoleNamesForUserAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken = default);
+
+    Task DeleteByRoleIdAsync(Guid roleId, DbConnection connection, DbTransaction transaction,
+        CancellationToken cancellationToken = default);
 }

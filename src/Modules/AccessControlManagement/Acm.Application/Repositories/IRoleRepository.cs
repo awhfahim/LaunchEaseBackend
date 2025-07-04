@@ -16,4 +16,7 @@ public interface IRoleRepository
     Task DeleteAsync(Guid id, CancellationToken cancellationToken = default);
     Task<bool> ExistsAsync(Guid id, CancellationToken cancellationToken = default);
     Task<bool> NameExistsAsync(string name, Guid tenantId, CancellationToken cancellationToken = default);
+
+    Task DeleteAsync(Guid id, DbConnection connection, DbTransaction transaction,
+        CancellationToken cancellationToken = default);
 }

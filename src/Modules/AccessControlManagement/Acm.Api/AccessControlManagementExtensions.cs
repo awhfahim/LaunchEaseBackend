@@ -34,7 +34,7 @@ public static class AccessControlManagementExtensions
         // services.AddJwtAuth(configuration);
         
         services.RegisterSecurityManagementApplicationServices();
-        services.RegisterSecurityManagementInfrastructureServices(configuration);
+        await services.RegisterSecurityManagementInfrastructureServices(configuration);
         return services;
     }
 }

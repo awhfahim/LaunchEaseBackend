@@ -6,4 +6,6 @@ public interface ITenantService
 {
     Task<TenantResponse?> RegisterTenantAsync(
         RegisterTenantRequest request, CancellationToken cancellationToken = default);
+
+    Task DeleteTenantAsync(Guid id, CancellationToken ct);
 }

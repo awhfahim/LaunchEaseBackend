@@ -1,5 +1,4 @@
 using System.Data;
-using System.Data.Common;
 using Acm.Application.Repositories;
 using Acm.Domain.Entities;
 using Common.Application.Data;
@@ -55,32 +54,16 @@ public class TenantRepository : ITenantRepository
         return await connection.QueryAsync<Tenant>(sql);
     }
 
-    private async Task CreateDefaultAdminClaimsAsync(IDbConnection connection, IDbTransaction transaction, Guid roleId)
+    private async Task AssignDefaultTenantAdminClaimsAsync(IDbConnection connection, IDbTransaction transaction, Guid roleId)
     {
-        // Define default admin permissions for tenant
-        var defaultPermissions = new[]
-        {
-            "users.view", "users.create", "users.edit", "users.delete",
-            "roles.view", "roles.create", "roles.edit", "roles.delete",
-            "tenant.settings.view", "tenant.settings.edit",
-            "dashboard.view",
-            "authentication.view", "authentication.edit",
-            "authorization.view", "authorization.edit"
-        };
-
         const string insertClaimSql = @"
-        INSERT INTO role_claims (id, role_id, claim_type, claim_value)
-        VALUES (@Id, @RoleId, @ClaimType, @ClaimValue)";
+            insert into role_claims (role_id, master_claim_id)
+            select @RoleId, m.id
+            from master_claims m
+            inner join master_claims_category mcc on m.category_id = mcc.id
+            where mcc.name ilike 'tenant%'";
 
-        var claimInserts = defaultPermissions.Select(permission => new
-        {
-            Id = Guid.NewGuid(),
-            RoleId = roleId,
-            ClaimType = "permission",
-            ClaimValue = permission
-        });
-
-        await connection.ExecuteAsync(insertClaimSql, claimInserts, transaction: transaction);
+        await connection.ExecuteAsync(insertClaimSql, new {RoleId = roleId}, transaction: transaction);
     }
     public async Task<Guid> CreateAsync(Tenant tenant, Role adminRole, User adminUser, UserRole userRole, 
         Guid userTenantId)
@@ -165,7 +148,7 @@ public class TenantRepository : ITenantRepository
             await connection.ExecuteAsync(sql, parameters, transaction: transaction);
 
             // Still need to add permissions separately
-            await CreateDefaultAdminClaimsAsync(connection, transaction, adminRole.Id);
+            await AssignDefaultTenantAdminClaimsAsync(connection, transaction, adminRole.Id);
 
             await transaction.CommitAsync();
 

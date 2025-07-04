@@ -38,14 +38,6 @@ public class AuthController : JsonApiControllerBase
         _roleClaimRepository = roleClaimRepository;
     }
 
-    [HttpPost("login")]
-    public IActionResult Login([FromBody] LoginRequest request)
-    {
-        // Redirect users to use the new multi-tenant authentication flow
-        return BadRequest(ApiResponse<object>.ErrorResult(
-            "This endpoint is deprecated. Please use /api/auth/initial-login to authenticate, then /api/auth/tenant-login to select a tenant."));
-    }
-
     [HttpPost("refresh")]
     [Authorize]
     public async Task<IActionResult> RefreshToken()
@@ -186,7 +178,7 @@ public class AuthController : JsonApiControllerBase
         }
     }
 
-    [HttpPost("initial-login")]
+    [HttpPost("login")]
     public async Task<IActionResult> InitialLogin([FromBody] InitialLoginRequest request)
     {
         try

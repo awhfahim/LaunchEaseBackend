@@ -124,3 +124,35 @@ CREATE INDEX IF NOT EXISTS idx_role_claims_type_value ON role_claims(claim_type,
 --     WHERE u.id = user_claims.user_id
 -- )
 -- WHERE tenant_id IS NULL;
+
+
+DELETE FROM role_claims 
+WHERE claim_value NOT IN (SELECT claim_value FROM master_claims);
+
+-- Clean up user_claims that don't have corresponding master_claims  
+DELETE FROM user_claims 
+WHERE claim_value NOT IN (SELECT claim_value FROM master_claims);
+
+-- Add foreign key constraint to role_claims table
+-- This ensures only valid permissions from master_claims can be assigned to roles
+ALTER TABLE role_claims 
+ADD CONSTRAINT fk_role_claims_master_claims 
+FOREIGN KEY (claim_value) REFERENCES master_claims(claim_value) 
+ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- Add foreign key constraint to user_claims table
+-- This ensures only valid permissions from master_claims can be assigned to users
+ALTER TABLE user_claims 
+ADD CONSTRAINT fk_user_claims_master_claims 
+FOREIGN KEY (claim_value) REFERENCES master_claims(claim_value) 
+ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- Add unique constraint to prevent duplicate role-permission assignments
+ALTER TABLE role_claims 
+ADD CONSTRAINT uk_role_claims_role_claim 
+UNIQUE (role_id, claim_value);
+
+-- Add unique constraint to prevent duplicate user-permission assignments
+ALTER TABLE user_claims 
+ADD CONSTRAINT uk_user_claims_user_tenant_claim 
+UNIQUE (user_id, tenant_id, claim_value);

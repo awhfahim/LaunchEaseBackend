@@ -1,4 +1,3 @@
-using System.Data.Common;
 using Acm.Application.Repositories;
 using Acm.Domain.Entities;
 using Common.Application.Data;

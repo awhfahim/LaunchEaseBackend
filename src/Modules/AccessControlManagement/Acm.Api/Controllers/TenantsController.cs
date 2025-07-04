@@ -4,8 +4,6 @@ using Acm.Application.Repositories;
 using Acm.Application.Services;
 using Acm.Infrastructure.Authorization;
 using Acm.Infrastructure.Authorization.Attributes;
-using Common.Application.Data;
-using Common.Application.Providers;
 using Common.HttpApi.Controllers;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
@@ -37,8 +35,16 @@ public class TenantsController : JsonApiControllerBase
         return Ok(ApiResponse<TenantResponse>.SuccessResult(result, "Tenant registered successfully"));
     }
 
+    [HttpDelete]
+    [RequirePermission(PermissionConstants.GlobalTenantsDelete)]
+    public async Task<IActionResult> DeleteTenant(Guid id)
+    {
+        await _tenantService.DeleteTenantAsync(id, HttpContext.RequestAborted);
+        return Ok(ApiResponse<string>.SuccessResult("Tenant deleted successfully"));
+    }
+
     [HttpGet("{slug}")]
-    [RequirePermission(PermissionConstants.TenantSettingsView)] // Tenant users can view their own tenant
+    [RequirePermission(PermissionConstants.TenantSettingsView)]
     public async Task<IActionResult> GetTenantBySlug([FromRoute, BindRequired] string slug)
     {
         try
@@ -49,10 +55,9 @@ public class TenantsController : JsonApiControllerBase
                 return NotFound(ApiResponse<TenantResponse>.ErrorResult("Tenant not found"));
             }
 
-            // Check if user has permission to access this specific tenant
             if (!await CanAccessTenant(tenant.Id))
             {
-                return Forbid(); // This will be handled by the global exception handler
+                return Forbid();
             }
 
             var response = new TenantResponse

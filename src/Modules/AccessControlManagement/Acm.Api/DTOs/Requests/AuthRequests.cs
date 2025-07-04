@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Acm.Api.DTOs.Requests;
 
-public class LoginRequest
+public record LoginRequest
 {
     [Required]
     [EmailAddress]
@@ -14,7 +14,7 @@ public class LoginRequest
     public bool RememberMe { get; set; }
 }
 
-public class CreateUserRequest
+public record CreateUserRequest
 {
     [Required]
     [EmailAddress]
@@ -37,7 +37,7 @@ public class CreateUserRequest
     public ICollection<string> Roles { get; set; } = new List<string>();
 }
 
-public class UpdateUserRequest
+public record UpdateUserRequest
 {
     [Required]
     [EmailAddress]
@@ -57,18 +57,16 @@ public class UpdateUserRequest
     public bool IsLocked { get; set; }
 }
 
-public class CreateRoleRequest
+public record CreateRoleRequest
 {
     [Required]
     [StringLength(50)]
     public required string Name { get; set; }
 
     public string? Description { get; set; }
-
-    public ICollection<string> Permissions { get; set; } = new List<string>();
 }
 
-public class UpdateRoleRequest
+public record UpdateRoleRequest
 {
     [Required]
     [StringLength(50)]
@@ -79,7 +77,7 @@ public class UpdateRoleRequest
 
 public class AssignPermissionsRequest
 {
-    public required ICollection<string> Permissions { get; set; }
+    public required ICollection<Guid> Permissions { get; set; }
 }
 
 public class InitialLoginRequest

@@ -1,4 +1,5 @@
 using Acm.Application.Services;
+using Acm.Application.Services.RoleServices;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -11,6 +12,7 @@ public static class DependencyInjection
     {
         services.AddValidatorsFromAssemblyContaining(typeof(DependencyInjection));
         services.AddScoped<ITenantService, TenantService>();
+        services.AddScoped<IRoleService, RoleService>();
         return services;
     }
 }

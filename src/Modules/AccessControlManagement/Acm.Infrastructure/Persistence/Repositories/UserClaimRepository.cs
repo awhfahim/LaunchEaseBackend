@@ -21,7 +21,8 @@ public class UserClaimRepository : IUserClaimRepository
         
         const string sql = @"
             SELECT id, user_id, tenant_id, claim_type, claim_value
-            FROM user_claims 
+            FROM user_claims
+            INNER JOIN master_claims mc on mc.id = user_claims.master_claim_id 
             WHERE user_id = @UserId";
         
         return await connection.QueryAsync<UserClaim>(sql, new { UserId = userId });
@@ -33,7 +34,8 @@ public class UserClaimRepository : IUserClaimRepository
         
         const string sql = @"
             SELECT id, user_id, tenant_id, claim_type, claim_value
-            FROM user_claims 
+            FROM user_claims
+            INNER JOIN master_claims mc on mc.id = user_claims.master_claim_id
             WHERE user_id = @UserId AND tenant_id = @TenantId";
         
         return await connection.QueryAsync<UserClaim>(sql, new { UserId = userId, TenantId = tenantId });
@@ -44,10 +46,11 @@ public class UserClaimRepository : IUserClaimRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync();
         
         const string sql = @"
-            SELECT id, user_id, claim_type, claim_value
-            FROM user_claims 
+            SELECT u.id, user_id, claim_type, claim_value
+            FROM user_claims u
+                     INNER JOIN master_claims mc on mc.id = u.master_claim_id
             WHERE user_id = @UserId AND claim_type = @ClaimType AND claim_value = @ClaimValue";
-        
+                    
         return await connection.QueryFirstOrDefaultAsync<UserClaim>(sql, new { 
             UserId = userId, 
             ClaimType = claimType, 
@@ -178,7 +181,8 @@ public class UserClaimRepository : IUserClaimRepository
         
         const string sql = @"
             SELECT claim_type, claim_value
-            FROM user_claims 
+            FROM user_claims
+            inner join master_claims mc on mc.id = user_claims.master_claim_id
             WHERE user_id = @UserId";
         
         var results = await connection.QueryAsync<(string ClaimType, string ClaimValue)>(sql, new { UserId = userId });
@@ -191,7 +195,8 @@ public class UserClaimRepository : IUserClaimRepository
         
         const string sql = @"
             SELECT claim_type as Type, claim_value as Value
-            FROM user_claims 
+            FROM user_claims
+            inner join master_claims mc on mc.id = user_claims.master_claim_id
             WHERE user_id = @UserId AND tenant_id = @TenantId";
         
         var claims = await connection.QueryAsync<dynamic>(sql, new { UserId = userId, TenantId = tenantId });

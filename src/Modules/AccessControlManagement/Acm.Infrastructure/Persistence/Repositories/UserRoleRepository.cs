@@ -8,6 +8,8 @@ namespace Acm.Infrastructure.Persistence.Repositories;
 
 public class UserRoleRepository : IUserRoleRepository
 {
+    private const string DeleteByRoleIdSql = "DELETE FROM user_roles WHERE role_id = @RoleId";
+    
     private readonly IDbConnectionFactory _connectionFactory;
 
     public UserRoleRepository(IDbConnectionFactory connectionFactory)
@@ -87,10 +89,13 @@ public class UserRoleRepository : IUserRoleRepository
     public async Task DeleteByRoleIdAsync(Guid roleId, CancellationToken cancellationToken = default)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync();
+        await connection.ExecuteAsync(DeleteByRoleIdSql, new { RoleId = roleId });
+    }
 
-        const string sql = "DELETE FROM user_roles WHERE role_id = @RoleId";
-
-        await connection.ExecuteAsync(sql, new { RoleId = roleId });
+    public async Task DeleteByRoleIdAsync(Guid roleId, DbConnection connection, DbTransaction transaction,
+        CancellationToken cancellationToken = default)
+    {
+        await connection.ExecuteAsync(DeleteByRoleIdSql, new { RoleId = roleId }, transaction);
     }
 
     public async Task<bool> ExistsAsync(Guid userId, Guid roleId, CancellationToken cancellationToken = default)
@@ -130,7 +135,8 @@ public class UserRoleRepository : IUserRoleRepository
         return await connection.QueryAsync<UserRole>(sql, new { UserId = userId, TenantId = tenantId });
     }
 
-    public async Task<UserRole?> GetAsync(Guid userId, Guid roleId, Guid tenantId, CancellationToken cancellationToken = default)
+    public async Task<UserRole?> GetAsync(Guid userId, Guid roleId, Guid tenantId,
+        CancellationToken cancellationToken = default)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync();
 
@@ -139,28 +145,35 @@ public class UserRoleRepository : IUserRoleRepository
             FROM user_roles 
             WHERE user_id = @UserId AND role_id = @RoleId AND tenant_id = @TenantId";
 
-        return await connection.QueryFirstOrDefaultAsync<UserRole>(sql, new { UserId = userId, RoleId = roleId, TenantId = tenantId });
+        return await connection.QueryFirstOrDefaultAsync<UserRole>(sql,
+            new { UserId = userId, RoleId = roleId, TenantId = tenantId });
     }
 
-    public async Task DeleteAsync(Guid userId, Guid roleId, Guid tenantId, CancellationToken cancellationToken = default)
+    public async Task DeleteAsync(Guid userId, Guid roleId, Guid tenantId,
+        CancellationToken cancellationToken = default)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync();
 
-        const string sql = "DELETE FROM user_roles WHERE user_id = @UserId AND role_id = @RoleId AND tenant_id = @TenantId";
+        const string sql =
+            "DELETE FROM user_roles WHERE user_id = @UserId AND role_id = @RoleId AND tenant_id = @TenantId";
 
         await connection.ExecuteAsync(sql, new { UserId = userId, RoleId = roleId, TenantId = tenantId });
     }
 
-    public async Task<bool> ExistsAsync(Guid userId, Guid roleId, Guid tenantId, CancellationToken cancellationToken = default)
+    public async Task<bool> ExistsAsync(Guid userId, Guid roleId, Guid tenantId,
+        CancellationToken cancellationToken = default)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync();
 
-        const string sql = "SELECT 1 FROM user_roles WHERE user_id = @UserId AND role_id = @RoleId AND tenant_id = @TenantId";
+        const string sql =
+            "SELECT 1 FROM user_roles WHERE user_id = @UserId AND role_id = @RoleId AND tenant_id = @TenantId";
 
-        return await connection.QueryFirstOrDefaultAsync<int?>(sql, new { UserId = userId, RoleId = roleId, TenantId = tenantId }) is not null;
+        return await connection.QueryFirstOrDefaultAsync<int?>(sql,
+            new { UserId = userId, RoleId = roleId, TenantId = tenantId }) is not null;
     }
 
-    public async Task<IEnumerable<string>> GetRoleNamesForUserAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<string>> GetRoleNamesForUserAsync(Guid userId, Guid tenantId,
+        CancellationToken cancellationToken = default)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync();
 

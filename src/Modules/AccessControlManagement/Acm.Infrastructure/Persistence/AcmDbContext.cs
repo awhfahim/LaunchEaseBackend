@@ -1,3 +1,4 @@
+using Acm.Domain.Entities;
 using Common.Domain.Interfaces;
 using Humanizer;
 using Microsoft.EntityFrameworkCore;
@@ -10,10 +11,15 @@ public class AcmDbContext : DbContext
     {
     }
 
+    public DbSet<MasterClaim> MasterClaims => Set<MasterClaim>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AcmDbContext).Assembly);
+
+        modelBuilder.Entity<MasterClaim>()
+            .ToTable("master_claims", "public", (x) => x.ExcludeFromMigrations());
 
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
         {

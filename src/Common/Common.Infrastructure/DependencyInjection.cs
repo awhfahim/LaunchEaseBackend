@@ -2,7 +2,6 @@
 using Common.Application.Options;
 using Common.Application.Providers;
 using Common.Application.Services;
-using Common.Domain.CoreProviders;
 using Common.Infrastructure.Extensions;
 using Common.Infrastructure.Providers;
 using Common.Infrastructure.Services;

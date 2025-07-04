@@ -1,7 +1,6 @@
 using Acm.Application.DataTransferObjects;
 using Acm.Application.Repositories;
 using Acm.Domain.Entities;
-using Common.Application.Data;
 using Common.Application.Providers;
 using Microsoft.Extensions.Logging;
 
@@ -87,5 +86,10 @@ public class TenantService : ITenantService
         };
 
         return response;
+    }
+
+    public Task DeleteTenantAsync(Guid id, CancellationToken ct)
+    {
+        return _tenantRepository.DeleteAsync(id, ct);
     }
 }

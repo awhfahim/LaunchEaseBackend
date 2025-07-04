@@ -1,6 +1,7 @@
 using Acm.Api.DTOs.Requests;
 using Acm.Api.DTOs.Responses;
 using Acm.Application.Repositories;
+using Acm.Application.Services.RoleServices;
 using Acm.Domain.Entities;
 using Acm.Infrastructure.Authorization.Attributes;
 using Acm.Infrastructure.Authorization;
@@ -18,20 +19,22 @@ public class RolesController : JsonApiControllerBase
     private readonly IRoleRepository _roleRepository;
     private readonly IRoleClaimRepository _roleClaimRepository;
     private readonly IUserRoleRepository _userRoleRepository;
+    private readonly IRoleService _roleService;
 
     public RolesController(
         IRoleRepository roleRepository,
         IRoleClaimRepository roleClaimRepository,
-        IUserRoleRepository userRoleRepository)
+        IUserRoleRepository userRoleRepository, IRoleService roleService)
     {
         _roleRepository = roleRepository;
         _roleClaimRepository = roleClaimRepository;
         _userRoleRepository = userRoleRepository;
+        _roleService = roleService;
     }
 
     [HttpGet]
     [RequirePermission(PermissionConstants.RolesView)]
-    public async Task<ActionResult<ApiResponse<IEnumerable<RoleResponse>>>> GetRoles()
+    public async Task<IActionResult> GetRoles()
     {
         try
         {
@@ -57,13 +60,14 @@ public class RolesController : JsonApiControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, ApiResponse<IEnumerable<RoleResponse>>.ErrorResult("An error occurred while fetching roles"));
+            return StatusCode(500,
+                ApiResponse<IEnumerable<RoleResponse>>.ErrorResult("An error occurred while fetching roles"));
         }
     }
 
     [HttpGet("{id:guid}")]
     [RequirePermission(PermissionConstants.RolesView)]
-    public async Task<ActionResult<ApiResponse<RoleResponse>>> GetRole([FromRoute] Guid id)
+    public async Task<IActionResult> GetRole([FromRoute] Guid id)
     {
         try
         {
@@ -95,7 +99,7 @@ public class RolesController : JsonApiControllerBase
 
     [HttpPost]
     [RequirePermission(PermissionConstants.RolesCreate)]
-    public async Task<ActionResult<ApiResponse<RoleResponse>>> CreateRole([FromBody] CreateRoleRequest request)
+    public async Task<IActionResult> CreateRole([FromBody] CreateRoleRequest request)
     {
         try
         {
@@ -118,26 +122,12 @@ public class RolesController : JsonApiControllerBase
 
             await _roleRepository.CreateAsync(role);
 
-            // Add permissions as claims
-            foreach (var permission in request.Permissions)
-            {
-                var roleClaim = new RoleClaim
-                {
-                    Id = Guid.NewGuid(),
-                    RoleId = role.Id,
-                    ClaimType = "permission",
-                    ClaimValue = permission
-                };
-                await _roleClaimRepository.CreateAsync(roleClaim);
-            }
-
             var response = new RoleResponse
             {
                 Id = role.Id,
                 Name = role.Name,
                 Description = role.Description,
-                CreatedAt = role.CreatedAt,
-                Permissions = request.Permissions.ToList()
+                CreatedAt = role.CreatedAt
             };
 
             return CreatedAtAction(
@@ -153,7 +143,7 @@ public class RolesController : JsonApiControllerBase
 
     [HttpPut("{id:guid}")]
     [RequirePermission(PermissionConstants.RolesEdit)]
-    public async Task<ActionResult<ApiResponse<RoleResponse>>> UpdateRole([FromRoute] Guid id, [FromBody] UpdateRoleRequest request)
+    public async Task<IActionResult> UpdateRole([FromRoute] Guid id, [FromBody] UpdateRoleRequest request)
     {
         try
         {
@@ -199,26 +189,17 @@ public class RolesController : JsonApiControllerBase
 
     [HttpDelete("{id:guid}")]
     [RequirePermission(PermissionConstants.RolesDelete)]
-    public async Task<ActionResult<ApiResponse<object>>> DeleteRole([FromRoute] Guid id)
+    public async Task<IActionResult> DeleteRole([FromRoute] Guid id)
     {
         try
         {
-            var role = await _roleRepository.GetByIdAsync(id);
-            if (role == null || role.TenantId != GetTenantId())
-            {
-                return NotFound(ApiResponse<object>.ErrorResult("Role not found"));
-            }
+            var tenantId = GetTenantId();
+            var result = await _roleService.DeleteRoleAsync(id, tenantId, HttpContext.RequestAborted);
 
-            // Delete role claims
-            await _roleClaimRepository.DeleteByRoleIdAsync(id);
+            if (!result.result)
+                return NotFound(ApiResponse<object>.ErrorResult(result.message));
 
-            // Delete user roles
-            await _userRoleRepository.DeleteByRoleIdAsync(id);
-
-            // Delete role
-            await _roleRepository.DeleteAsync(id);
-
-            return Ok(ApiResponse<object>.SuccessResult(null, "Role deleted successfully"));
+            return Ok(ApiResponse<object>.SuccessResult(result.result, result.message));
         }
         catch (Exception ex)
         {
@@ -228,38 +209,19 @@ public class RolesController : JsonApiControllerBase
 
     [HttpPost("{id:guid}/permissions")]
     [RequirePermission(PermissionConstants.RolesEdit)]
-    public async Task<ActionResult<ApiResponse<object>>> AssignPermissions([FromRoute] Guid id, [FromBody] AssignPermissionsRequest request)
+    public async Task<IActionResult> AssignPermissions([FromRoute] Guid id, [FromBody] AssignPermissionsRequest request)
     {
         try
         {
-            var role = await _roleRepository.GetByIdAsync(id);
-            if (role == null || role.TenantId != GetTenantId())
+            if (request.Permissions.Count == 0)
             {
-                return NotFound(ApiResponse<object>.ErrorResult("Role not found"));
+                return BadRequest("No permissions provided to assign");
             }
+            
+            var result = await _roleService.AssignPermissionsAsync(id, GetTenantId(), request.Permissions,
+                HttpContext.RequestAborted);
 
-            // Remove existing permission claims
-            var existingClaims = await _roleClaimRepository.GetByRoleIdAsync(id);
-            var permissionClaims = existingClaims.Where(c => c.ClaimType == "permission");
-            foreach (var claim in permissionClaims)
-            {
-                await _roleClaimRepository.DeleteAsync(claim.Id);
-            }
-
-            // Add new permission claims
-            foreach (var permission in request.Permissions)
-            {
-                var roleClaim = new RoleClaim
-                {
-                    Id = Guid.NewGuid(),
-                    RoleId = id,
-                    ClaimType = "permission",
-                    ClaimValue = permission
-                };
-                await _roleClaimRepository.CreateAsync(roleClaim);
-            }
-
-            return Ok(ApiResponse<object>.SuccessResult(null, "Permissions assigned successfully"));
+            return Ok(ApiResponse<object>.SuccessResult(result.result, "Permissions assigned successfully"));
         }
         catch (Exception ex)
         {
@@ -269,66 +231,65 @@ public class RolesController : JsonApiControllerBase
 
     [HttpGet("permissions")]
     [RequirePermission(PermissionConstants.RolesView)]
-    public ActionResult<ApiResponse<IEnumerable<string>>> GetAvailablePermissions()
+    public IActionResult GetAvailablePermissions()
     {
-        
         //Todo: This should ideally be fetched from a configuration or database
-       var permissions = new[]
-       {
-           // User Management (Tenant-scoped)
-           PermissionConstants.UsersView,
-           PermissionConstants.UsersCreate,
-           PermissionConstants.UsersEdit,
-           PermissionConstants.UsersDelete,
-       
-           // Role Management (Tenant-scoped)
-           PermissionConstants.RolesView,
-           PermissionConstants.RolesCreate,
-           PermissionConstants.RolesEdit,
-           PermissionConstants.RolesDelete,
-       
-           // Tenant Settings (Own tenant only)
-           PermissionConstants.TenantSettingsView,
-           PermissionConstants.TenantSettingsEdit,
-       
-           // Dashboard (Tenant-scoped)
-           PermissionConstants.DashboardView,
-       
-           // Authentication & Authorization (Tenant-scoped)
-           PermissionConstants.AuthenticationView,
-           PermissionConstants.AuthenticationEdit,
-           PermissionConstants.AuthorizationView,
-           PermissionConstants.AuthorizationEdit,
-       
-           // SYSTEM-WIDE PERMISSIONS
-           // Global Tenant Management
-           PermissionConstants.GlobalTenantsView,
-           PermissionConstants.GlobalTenantsCreate,
-           PermissionConstants.GlobalTenantsEdit,
-           PermissionConstants.GlobalTenantsDelete,
-       
-           // Global User Management (Cross-tenant)
-           PermissionConstants.GlobalUsersView,
-           PermissionConstants.GlobalUsersCreate,
-           PermissionConstants.GlobalUsersEdit,
-           PermissionConstants.GlobalUsersDelete,
-       
-           // Global Role Management (Cross-tenant)
-           PermissionConstants.GlobalRolesView,
-           PermissionConstants.GlobalRolesCreate,
-           PermissionConstants.GlobalRolesEdit,
-           PermissionConstants.GlobalRolesDelete,
-       
-           // System Administration
-           PermissionConstants.SystemAdmin,
-           PermissionConstants.SystemDashboard,
-           PermissionConstants.SystemLogs,
-           PermissionConstants.SystemConfiguration,
-       
-           // BUSINESS OWNER PERMISSIONS
-           PermissionConstants.BusinessOwner,
-           PermissionConstants.CrossTenantAccess
-       };
+        var permissions = new[]
+        {
+            // User Management (Tenant-scoped)
+            PermissionConstants.UsersView,
+            PermissionConstants.UsersCreate,
+            PermissionConstants.UsersEdit,
+            PermissionConstants.UsersDelete,
+
+            // Role Management (Tenant-scoped)
+            PermissionConstants.RolesView,
+            PermissionConstants.RolesCreate,
+            PermissionConstants.RolesEdit,
+            PermissionConstants.RolesDelete,
+
+            // Tenant Settings (Own tenant only)
+            PermissionConstants.TenantSettingsView,
+            PermissionConstants.TenantSettingsEdit,
+
+            // Dashboard (Tenant-scoped)
+            PermissionConstants.DashboardView,
+
+            // Authentication & Authorization (Tenant-scoped)
+            PermissionConstants.AuthenticationView,
+            PermissionConstants.AuthenticationEdit,
+            PermissionConstants.AuthorizationView,
+            PermissionConstants.AuthorizationEdit,
+
+            // SYSTEM-WIDE PERMISSIONS
+            // Global Tenant Management
+            PermissionConstants.GlobalTenantsView,
+            PermissionConstants.GlobalTenantsCreate,
+            PermissionConstants.GlobalTenantsEdit,
+            PermissionConstants.GlobalTenantsDelete,
+
+            // Global User Management (Cross-tenant)
+            PermissionConstants.GlobalUsersView,
+            PermissionConstants.GlobalUsersCreate,
+            PermissionConstants.GlobalUsersEdit,
+            PermissionConstants.GlobalUsersDelete,
+
+            // Global Role Management (Cross-tenant)
+            PermissionConstants.GlobalRolesView,
+            PermissionConstants.GlobalRolesCreate,
+            PermissionConstants.GlobalRolesEdit,
+            PermissionConstants.GlobalRolesDelete,
+
+            // System Administration
+            PermissionConstants.SystemAdmin,
+            PermissionConstants.SystemDashboard,
+            PermissionConstants.SystemLogs,
+            PermissionConstants.SystemConfiguration,
+
+            // BUSINESS OWNER PERMISSIONS
+            PermissionConstants.BusinessOwner,
+            PermissionConstants.CrossTenantAccess
+        };
         return Ok(ApiResponse<IEnumerable<string>>.SuccessResult(permissions));
     }
 }

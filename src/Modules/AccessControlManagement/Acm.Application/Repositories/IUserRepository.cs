@@ -1,4 +1,3 @@
-using System.Data.Common;
 using Acm.Domain.Entities;
 
 namespace Acm.Application.Repositories;
