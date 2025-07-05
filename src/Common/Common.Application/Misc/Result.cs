@@ -1,6 +1,6 @@
 namespace Common.Application.Misc;
 
-public class Result<T>
+public sealed class Result<T>
 {
     public bool IsSuccess { get; }
     public T? Value { get; }
@@ -20,7 +20,7 @@ public class Result<T>
         ErrorType = errorType;
     }
 
-    public static Result<T> Success(T value) => new(value);
+    private static Result<T> Success(T value) => new(value);
 
     public static Result<T> Failure(string error, ErrorType errorType) => new(error, errorType);
     public static implicit operator Result<T>(T value) => Success(value);

@@ -2,7 +2,7 @@ using Common.Domain.Interfaces;
 
 namespace Acm.Domain.Entities;
 
-public class Role : IBaseEntity<Guid>
+public sealed class Role : IBaseEntity<Guid>
 {
     public required Guid Id { get; init; }
     public required Guid TenantId { get; set; }

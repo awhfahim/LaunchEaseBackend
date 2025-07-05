@@ -2,7 +2,7 @@ using Common.Domain.Interfaces;
 
 namespace Acm.Domain.Entities;
 
-public class UserClaim : IBaseEntity<Guid>
+public sealed class UserClaim : IBaseEntity<Guid>
 {
     public required Guid Id { get; init; }
     public required Guid UserId { get; set; }

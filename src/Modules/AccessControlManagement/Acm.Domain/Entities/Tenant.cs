@@ -2,7 +2,7 @@ using Common.Domain.Interfaces;
 
 namespace Acm.Domain.Entities;
 
-public class Tenant : IBaseEntity<Guid>
+public sealed class Tenant : IBaseEntity<Guid>
 {
     public required Guid Id { get; init; }
     public required string Name { get; set; }                // Business name

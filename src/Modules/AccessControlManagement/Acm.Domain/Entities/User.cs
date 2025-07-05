@@ -2,7 +2,7 @@ using Common.Domain.Interfaces;
 
 namespace Acm.Domain.Entities;
 
-public class User : IBaseEntity<Guid>
+public sealed class User : IBaseEntity<Guid>
 {
     public required Guid Id { get; init; }
     public required string Email { get; set; } // Global email - unique across system

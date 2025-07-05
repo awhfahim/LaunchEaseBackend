@@ -37,26 +37,6 @@ public record CreateUserRequest
     public Guid RoleId { get; set; }
 }
 
-public record UpdateUserRequest
-{
-    [Required]
-    [EmailAddress]
-    public required string Email { get; set; }
-
-    [Required]
-    [StringLength(50)]
-    public required string FirstName { get; set; }
-
-    [Required]
-    [StringLength(50)]
-    public required string LastName { get; set; }
-
-    public string? PhoneNumber { get; set; }
-
-    public bool IsEmailConfirmed { get; set; }
-    public bool IsLocked { get; set; }
-}
-
 public record CreateRoleRequest
 {
     [Required]

@@ -1,5 +1,6 @@
 using Acm.Api.DTOs.Requests;
 using Acm.Api.DTOs.Responses;
+using Acm.Application.DataTransferObjects.Request;
 using Acm.Application.Services;
 using Acm.Domain.Entities;
 using Acm.Infrastructure.Authorization.Attributes;
@@ -78,7 +79,7 @@ public class UsersController : JsonApiControllerBase
         var tenantId = GetTenantId();
 
         var result = await _userService.GetUserAsync(id, tenantId, HttpContext.RequestAborted);
-        
+
         return FromResult(result, user => Ok(
             ApiResponse<UserResponse>.SuccessResult(new UserResponse
             {
@@ -100,51 +101,41 @@ public class UsersController : JsonApiControllerBase
     [RequirePermission(PermissionConstants.UsersCreate)]
     public async Task<IActionResult> CreateUser([FromBody] CreateUserRequest request)
     {
-        try
+        var tenantId = GetTenantId();
+        var hashedPassword = await _authenticationService.HashPasswordAsync(request.Password);
+
+        var user = new User
         {
-            var tenantId = GetTenantId();
-            var hashedPassword = await _authenticationService.HashPasswordAsync(request.Password);
+            Id = _guidProvider.SortableGuid(),
+            Email = request.Email,
+            FirstName = request.FirstName,
+            LastName = request.LastName,
+            PasswordHash = hashedPassword,
+            SecurityStamp = Guid.NewGuid().ToString(),
+            PhoneNumber = request.PhoneNumber,
+            IsEmailConfirmed = false, //Todo: Email Verification Required
+            CreatedAt = _dateTimeProvider.CurrentUtcTime
+        };
 
-            var user = new User
+        var result =
+            await _userService.CreateUserWithTenantAsync(user, tenantId, request.RoleId,
+                HttpContext.RequestAborted);
+
+        return FromResult(result, createdUser => CreatedAtAction(nameof(GetUser), new { id = createdUser.Id },
+            ApiResponse<UserResponse>.SuccessResult(new UserResponse()
             {
-                Id = _guidProvider.SortableGuid(),
-                Email = request.Email,
-                FirstName = request.FirstName,
-                LastName = request.LastName,
-                PasswordHash = hashedPassword,
-                SecurityStamp = Guid.NewGuid().ToString(),
-                PhoneNumber = request.PhoneNumber,
-                IsEmailConfirmed = false, //Todo: Email Verification Required
-                CreatedAt = _dateTimeProvider.CurrentUtcTime
-            };
-
-            await _userService.CreateUserWithTenantAsync(user, tenantId, request.RoleId, HttpContext.RequestAborted);
-
-            var response = new UserResponse
-            {
-                Id = user.Id,
-                Email = user.Email,
-                FirstName = user.FirstName,
-                LastName = user.LastName,
-                FullName = user.FullName,
-                PhoneNumber = user.PhoneNumber,
-                IsEmailConfirmed = user.IsEmailConfirmed,
-                IsLocked = user.IsGloballyLocked,
-                LockoutEnd = user.GlobalLockoutEnd,
-                LastLoginAt = user.LastLoginAt,
-                CreatedAt = user.CreatedAt,
-                Roles = []
-            };
-
-            return CreatedAtAction(
-                nameof(GetUser),
-                new { id = user.Id },
-                ApiResponse<UserResponse>.SuccessResult(response, "User created successfully"));
-        }
-        catch (Exception)
-        {
-            return StatusCode(500, ApiResponse<UserResponse>.ErrorResult("An error occurred while creating user"));
-        }
+                Id = createdUser.Id,
+                Email = createdUser.Email,
+                FirstName = createdUser.FirstName,
+                LastName = createdUser.LastName,
+                FullName = createdUser.FullName,
+                PhoneNumber = createdUser.PhoneNumber,
+                IsEmailConfirmed = createdUser.IsEmailConfirmed,
+                IsLocked = createdUser.IsGloballyLocked,
+                LockoutEnd = createdUser.GlobalLockoutEnd,
+                LastLoginAt = createdUser.LastLoginAt,
+                CreatedAt = createdUser.CreatedAt
+            })));
     }
 
     [HttpPut("{id:guid}")]
@@ -152,61 +143,24 @@ public class UsersController : JsonApiControllerBase
     public async Task<IActionResult> UpdateUser([FromRoute] Guid id,
         [FromBody] UpdateUserRequest request)
     {
-        try
+        var tenantId = GetTenantId();
+
+        var result = await _userService.UpdateUserAsync(id, request, tenantId, HttpContext.RequestAborted);
+
+        return FromResult(result, user => Ok(ApiResponse<UserResponse>.SuccessResult(new UserResponse
         {
-            var tenantId = GetTenantId();
-
-            var user = await _userService.GetByIdAsync(id, HttpContext.RequestAborted);
-            if (user == null)
-            {
-                return NotFound(ApiResponse<UserResponse>.ErrorResult("User not found"));
-            }
-
-            var isMember = await _userService.IsUserMemberOfTenantAsync(id, tenantId,
-                HttpContext.RequestAborted);
-
-            if (!isMember)
-            {
-                return NotFound(ApiResponse<UserResponse>.ErrorResult("User not found in current tenant"));
-            }
-
-            var existingUser = await _userService.GetByEmailAsync(request.Email, HttpContext.RequestAborted);
-            if (existingUser != null && existingUser.Id != id)
-            {
-                return BadRequest(ApiResponse<UserResponse>.ErrorResult("Email already exists"));
-            }
-
-            user.Email = request.Email;
-            user.FirstName = request.FirstName;
-            user.LastName = request.LastName;
-            user.PhoneNumber = request.PhoneNumber;
-            user.IsEmailConfirmed = request.IsEmailConfirmed;
-            user.IsGloballyLocked = request.IsLocked;
-            user.UpdatedAt = DateTime.UtcNow;
-
-            await _userService.UpdateUserAsync(user, HttpContext.RequestAborted);
-
-            var response = new UserResponse
-            {
-                Id = user.Id,
-                Email = user.Email,
-                FirstName = user.FirstName,
-                LastName = user.LastName,
-                FullName = user.FullName,
-                PhoneNumber = user.PhoneNumber,
-                IsEmailConfirmed = user.IsEmailConfirmed,
-                IsLocked = user.IsGloballyLocked,
-                LockoutEnd = user.GlobalLockoutEnd,
-                LastLoginAt = user.LastLoginAt,
-                CreatedAt = user.CreatedAt
-            };
-
-            return Ok(ApiResponse<UserResponse>.SuccessResult(response, "User updated successfully"));
-        }
-        catch (Exception)
-        {
-            return StatusCode(500, ApiResponse<UserResponse>.ErrorResult("An error occurred while updating user"));
-        }
+            Id = user.Id,
+            Email = user.Email,
+            FirstName = user.FirstName,
+            LastName = user.LastName,
+            FullName = user.FullName,
+            PhoneNumber = user.PhoneNumber,
+            IsEmailConfirmed = user.IsEmailConfirmed,
+            IsLocked = user.IsGloballyLocked,
+            LockoutEnd = user.GlobalLockoutEnd,
+            LastLoginAt = user.LastLoginAt,
+            CreatedAt = user.CreatedAt
+        }, "User updated successfully")));
     }
 
     [HttpDelete("{id:guid}")]
@@ -237,7 +191,7 @@ public class UsersController : JsonApiControllerBase
             {
                 return BadRequest(ApiResponse<object>.ErrorResult("Role IDs are required"));
             }
-            
+
             await _userService.AssignRoleToUserAsync(id, roleIds, tenantId, HttpContext.RequestAborted);
 
             return Ok(ApiResponse<object>.SuccessResult(new object(), "Roles assigned successfully"));
@@ -247,7 +201,7 @@ public class UsersController : JsonApiControllerBase
             return StatusCode(500, ApiResponse<object>.ErrorResult("An error occurred while assigning roles"));
         }
     }
-    
+
     [HttpPost("{id:guid}/unassign-roles")]
     [RequirePermission(PermissionConstants.UsersEdit)]
     public async Task<IActionResult> UnassignRoles([FromRoute, BindRequired] Guid id,
@@ -260,7 +214,7 @@ public class UsersController : JsonApiControllerBase
             {
                 return BadRequest(ApiResponse<object>.ErrorResult("Role IDs are required"));
             }
-            
+
             await _userService.RemoveRoleFromUserAsync(id, tenantId, roleIds, HttpContext.RequestAborted);
 
             return Ok(ApiResponse<object>.SuccessResult(new object(), "Roles unassigned successfully"));
@@ -270,7 +224,7 @@ public class UsersController : JsonApiControllerBase
             return StatusCode(500, ApiResponse<object>.ErrorResult("An error occurred while unassigning roles"));
         }
     }
-    
+
 
     [HttpPost("invite")]
     [RequirePermission(PermissionConstants.UsersCreate)]
@@ -281,7 +235,7 @@ public class UsersController : JsonApiControllerBase
             var tenantId = GetTenantId();
             var isAdded = await _userService.InviteUserAsync(request.Email, tenantId, HttpContext.RequestAborted);
 
-            return Ok(ApiResponse<bool>.SuccessResult(isAdded,"User invited to tenant successfully"));
+            return Ok(ApiResponse<bool>.SuccessResult(isAdded, "User invited to tenant successfully"));
         }
         catch (Exception)
         {
@@ -310,7 +264,7 @@ public class UsersController : JsonApiControllerBase
             return StatusCode(500, ApiResponse<object>.ErrorResult("An error occurred while checking email"));
         }
     }
-    
+
     [HttpGet("user-tenants")]
     [RequirePermission(PermissionConstants.GlobalUsersView)]
     public async Task<IActionResult> GetUserTenants([FromQuery, BindRequired] Guid userId)

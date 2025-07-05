@@ -243,7 +243,6 @@ public class EnhancedUserRepository : DapperGenericRepository<User, Guid>, IUser
     /// </summary>
     public override async Task<bool> UpdateAsync(User user, CancellationToken cancellationToken = default)
     {
-        user.UpdatedAt = DateTime.UtcNow;
         return await base.UpdateAsync(user, cancellationToken);
     }
 

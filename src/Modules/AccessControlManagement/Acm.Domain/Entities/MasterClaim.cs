@@ -1,6 +1,6 @@
 namespace Acm.Domain.Entities;
 
-public class MasterClaim
+public sealed class MasterClaim
 {
     public Guid Id { get; set; }
     public string ClaimType { get; set; } = "permission";

@@ -1,3 +1,4 @@
+using Acm.Application.DataTransferObjects.Request;
 using Acm.Application.Interfaces;
 using Acm.Domain.Entities;
 using Common.Application.Misc;
@@ -25,53 +26,45 @@ public class UserService : IUserService
         _dateTimeProvider = dateTimeProvider;
     }
 
-    public async Task<Guid> CreateUserWithTenantAsync(User user, Guid tenantId, Guid roleId,
+    public async Task<Result<User>> CreateUserWithTenantAsync(User user, Guid tenantId, Guid roleId,
         CancellationToken cancellationToken = default)
     {
-        try
+        return await _unitOfWork.Value.ExecuteInTransactionAsync(async (connection, transaction) =>
         {
-            return await _unitOfWork.Value.ExecuteInTransactionAsync(async (connection, transaction) =>
+            var emailExists =
+                await _unitOfWork.Value.Users.EmailExistsAsync(user.Email, connection, transaction,
+                    cancellationToken);
+            if (emailExists)
             {
-                var emailExists =
-                    await _unitOfWork.Value.Users.EmailExistsAsync(user.Email, connection, transaction,
-                        cancellationToken);
-                if (emailExists)
-                {
-                    throw new InvalidOperationException($"User with email {user.Email} already exists, invite them instead.");
-                }
+                return Result<User>.Failure("Email already exists", ErrorType.Conflict);
+            }
 
-                var userId = await _unitOfWork.Value.Users.InsertAsync(user, connection, transaction,
-                    cancellationToken);
+            var userId = await _unitOfWork.Value.Users.InsertAsync(user, connection, transaction,
+                cancellationToken);
 
-                var userTenant = new UserTenant
-                {
-                    Id = _guidProvider.SortableGuid(),
-                    UserId = userId,
-                    TenantId = tenantId,
-                    IsActive = true,
-                    JoinedAt = _dateTimeProvider.Value.CurrentUtcTime,
-                    InvitedBy = null
-                };
-                await _unitOfWork.Value.UserTenants.AddUserToTenantAsync(userTenant, connection, transaction,
-                    cancellationToken);
+            var userTenant = new UserTenant
+            {
+                Id = _guidProvider.SortableGuid(),
+                UserId = userId,
+                TenantId = tenantId,
+                IsActive = true,
+                JoinedAt = _dateTimeProvider.Value.CurrentUtcTime,
+                InvitedBy = null
+            };
+            await _unitOfWork.Value.UserTenants.AddUserToTenantAsync(userTenant, connection, transaction,
+                cancellationToken);
 
-                var userRole = new UserRole
-                {
-                    Id = _guidProvider.SortableGuid(),
-                    UserId = userId,
-                    RoleId = roleId,
-                    TenantId = tenantId
-                };
+            var userRole = new UserRole
+            {
+                Id = _guidProvider.SortableGuid(),
+                UserId = userId,
+                RoleId = roleId,
+                TenantId = tenantId
+            };
 
-                await _unitOfWork.Value.UserRoles.CreateAsync(userRole, connection, transaction);
-                return userId;
-            }, cancellationToken: cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to create user {Email} with tenant {TenantId}", user.Email, tenantId);
-            throw;
-        }
+            await _unitOfWork.Value.UserRoles.CreateAsync(userRole, connection, transaction);
+            return user;
+        }, cancellationToken: cancellationToken);
     }
 
     public async Task UpdateUserSecurityInfoAsync(Guid userId, string newPasswordHash, string newSecurityStamp,
@@ -223,14 +216,38 @@ public class UserService : IUserService
         return user;
     }
 
-    public Task<bool> UpdateUserAsync(User user, CancellationToken cancellationToken)
+    public async Task<Result<User>> UpdateUserAsync(Guid id, UpdateUserRequest request, Guid tenantId,
+        CancellationToken cancellationToken)
     {
+        var user = await _unitOfWork.Value.Users.GetByIdAsync(id, cancellationToken);
         if (user == null)
         {
-            throw new ArgumentNullException(nameof(user), "User cannot be null");
+            return Result<User>.Failure("User not found", ErrorType.NotFound);
         }
 
-        return _unitOfWork.Value.Users.UpdateAsync(user, cancellationToken);
+        var isMember = await _unitOfWork.Value.UserTenants.IsUserMemberOfTenantAsync(id, tenantId, cancellationToken);
+
+        if (!isMember)
+        {
+            return Result<User>.Failure("User not found in current tenant", ErrorType.NotFound);
+        }
+
+        var existingUser = await _unitOfWork.Value.Users.GetByEmailAsync(user.Email, cancellationToken);
+        if (existingUser != null && existingUser.Id != id)
+        {
+            return Result<User>.Failure("Email already exists", ErrorType.Conflict);
+        }
+
+        user.Email = request.Email;
+        user.FirstName = request.FirstName;
+        user.LastName = request.LastName;
+        user.PhoneNumber = request.PhoneNumber;
+        user.IsEmailConfirmed = request.IsEmailConfirmed;
+        user.IsGloballyLocked = request.IsLocked;
+        user.UpdatedAt = _dateTimeProvider.Value.CurrentUtcTime;
+        var isUpdated = await _unitOfWork.Value.Users.UpdateAsync(user);
+
+        return !isUpdated ? Result<User>.Failure("Failed to update user", ErrorType.InternalServerError) : user;
     }
 
     public Task<User?> GetByIdAsync(Guid userId, CancellationToken cancellationToken)
@@ -267,7 +284,8 @@ public class UserService : IUserService
     {
         return await _unitOfWork.Value.ExecuteInTransactionAsync(async (connection, transaction) =>
         {
-            var userExists = await _unitOfWork.Value.Users.ExistsAsync(userId, connection, transaction, cancellationToken);
+            var userExists =
+                await _unitOfWork.Value.Users.ExistsAsync(userId, connection, transaction, cancellationToken);
             if (!userExists)
             {
                 throw new InvalidOperationException($"User with ID {userId} does not exist");
@@ -342,7 +360,8 @@ public class UserService : IUserService
     {
         return _unitOfWork.Value.ExecuteInTransactionAsync(async (connection, transaction) =>
         {
-            var userExists = await _unitOfWork.Value.Users.ExistsAsync(userId, connection, transaction, cancellationToken);
+            var userExists =
+                await _unitOfWork.Value.Users.ExistsAsync(userId, connection, transaction, cancellationToken);
             if (!userExists)
             {
                 throw new InvalidOperationException($"User with ID {userId} does not exist");
@@ -367,15 +386,17 @@ public class UserService : IUserService
         var user = await _unitOfWork.Value.Users.GetByEmailAsync(email, cancellationToken);
         if (user == null)
         {
-            throw new InvalidOperationException($"User with this email {email} does not exist. Use CreateUser to create a new user.");
+            throw new InvalidOperationException(
+                $"User with this email {email} does not exist. Use CreateUser to create a new user.");
         }
-        
-        var isMember = await _unitOfWork.Value.UserTenants.IsUserMemberOfTenantAsync(user.Id, tenantId, cancellationToken);
+
+        var isMember =
+            await _unitOfWork.Value.UserTenants.IsUserMemberOfTenantAsync(user.Id, tenantId, cancellationToken);
         if (isMember)
         {
             throw new InvalidOperationException($"User with email {email} is already a member of tenant {tenantId}");
         }
-        
+
         var userTenant = new UserTenant
         {
             Id = _guidProvider.SortableGuid(),
@@ -385,7 +406,7 @@ public class UserService : IUserService
             JoinedAt = _dateTimeProvider.Value.CurrentUtcTime,
             InvitedBy = null // Set this to the user who sent the invite if needed
         };
-        
+
         await _unitOfWork.Value.UserTenants.AddUserToTenantAsync(userTenant, cancellationToken);
         return true;
     }
