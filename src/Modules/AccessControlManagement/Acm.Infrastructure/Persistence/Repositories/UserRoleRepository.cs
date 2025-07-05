@@ -1,3 +1,4 @@
+using System.Data;
 using System.Data.Common;
 using Acm.Application.Repositories;
 using Acm.Domain.Entities;
@@ -8,8 +9,6 @@ namespace Acm.Infrastructure.Persistence.Repositories;
 
 public class UserRoleRepository : IUserRoleRepository
 {
-    private const string DeleteByRoleIdSql = "DELETE FROM user_roles WHERE role_id = @RoleId";
-    
     private readonly IDbConnectionFactory _connectionFactory;
 
     public UserRoleRepository(IDbConnectionFactory connectionFactory)
@@ -55,17 +54,50 @@ public class UserRoleRepository : IUserRoleRepository
         return await connection.QueryFirstOrDefaultAsync<UserRole>(sql, new { UserId = userId, RoleId = roleId });
     }
 
-    public async Task<Guid> CreateAsync(UserRole userRole,
+    private async Task<Guid> CreateAsyncInternal(UserRole userRole,
+        IDbConnection? connection = null, IDbTransaction? transaction = null,
+        CancellationToken cancellationToken = default)
+    {
+        bool shouldDispose = false;
+        if (connection == null)
+        {
+            connection = await _connectionFactory.OpenConnectionAsync();
+            shouldDispose = true;
+        }
+
+        try
+        {
+            const string sql = @"
+                INSERT INTO user_roles (id, user_id, role_id, tenant_id)
+                VALUES (@Id, @UserId, @RoleId, @TenantId)";
+            
+            await connection.ExecuteAsync(sql, userRole, transaction);
+            return userRole.Id;
+        }
+        finally
+        {
+            if (shouldDispose && connection is IAsyncDisposable asyncDisposable)
+                await asyncDisposable.DisposeAsync();
+        }
+    }
+
+    public Task<Guid> CreateAsync(UserRole userRole,
+        CancellationToken cancellationToken = default)
+        => CreateAsyncInternal(userRole, null, null, cancellationToken);
+
+    public Task<Guid> CreateAsync(UserRole userRole, IDbConnection connection, IDbTransaction transaction)
+        => CreateAsyncInternal(userRole, connection, transaction);
+    
+    public async Task CreateRangeAsync(IEnumerable<UserRole> userRoles,
         CancellationToken cancellationToken = default)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync();
 
         const string sql = @"
-            INSERT INTO user_roles (id, user_id, role_id)
-            VALUES (@Id, @UserId, @RoleId)";
+            INSERT INTO user_roles (id, user_id, role_id, tenant_id)
+            VALUES (@Id, @UserId, @RoleId, @TenantId)";
 
-        await connection.ExecuteAsync(sql, userRole);
-        return userRole.Id;
+        await connection.ExecuteAsync(sql, userRoles);
     }
 
     public async Task DeleteAsync(Guid userId, Guid roleId, CancellationToken cancellationToken = default)
@@ -77,26 +109,84 @@ public class UserRoleRepository : IUserRoleRepository
         await connection.ExecuteAsync(sql, new { UserId = userId, RoleId = roleId });
     }
 
-    public async Task DeleteByUserIdAsync(Guid userId, CancellationToken cancellationToken = default)
+    public async Task DeleteRangeAsync(Guid userId, Guid tenantId, ICollection<Guid> roleIds)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync();
 
-        const string sql = "DELETE FROM user_roles WHERE user_id = @UserId";
+        const string sql = @"
+            DELETE FROM user_roles 
+            WHERE user_id = @UserId AND tenant_id = @TenantId AND role_id IN @RoleIds";
 
-        await connection.ExecuteAsync(sql, new { UserId = userId });
+        await connection.ExecuteAsync(sql, new { UserId = userId, TenantId = tenantId, RoleIds = roleIds });
     }
 
-    public async Task DeleteByRoleIdAsync(Guid roleId, CancellationToken cancellationToken = default)
-    {
-        await using var connection = await _connectionFactory.OpenConnectionAsync();
-        await connection.ExecuteAsync(DeleteByRoleIdSql, new { RoleId = roleId });
-    }
-
-    public async Task DeleteByRoleIdAsync(Guid roleId, DbConnection connection, DbTransaction transaction,
+    private async Task DeleteByUserIdInternalAsync(
+        Guid userId,
+        Guid tenantId,
+        IDbConnection? connection = null,
+        IDbTransaction? transaction = null,
         CancellationToken cancellationToken = default)
     {
-        await connection.ExecuteAsync(DeleteByRoleIdSql, new { RoleId = roleId }, transaction);
+        bool shouldDispose = false;
+        if (connection == null)
+        {
+            connection = await _connectionFactory.OpenConnectionAsync();
+            shouldDispose = true;
+        }
+
+        try
+        {
+            const string sql =
+                "DELETE FROM user_roles WHERE user_id = @UserId and tenant_id = @TenantId";
+
+            await connection.ExecuteAsync(sql, new { UserId = userId, TenantId = tenantId },
+                transaction);
+        }
+        finally
+        {
+            if (shouldDispose && connection is IAsyncDisposable asyncDisposable)
+                await asyncDisposable.DisposeAsync();
+        }
     }
+
+    public Task DeleteByUserIdAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken = default)
+        => DeleteByUserIdInternalAsync(userId, tenantId, null, null, cancellationToken);
+
+    public Task DeleteByUserIdAsync(Guid userId, Guid tenantId, IDbConnection connection, IDbTransaction transaction,
+        CancellationToken cancellationToken = default)
+        => DeleteByUserIdInternalAsync(userId, tenantId, connection, transaction, cancellationToken);
+
+    private async Task DeleteByRoleIdInternalAsync(
+        Guid roleId,
+        IDbConnection? connection = null,
+        IDbTransaction? transaction = null,
+        CancellationToken cancellationToken = default)
+    {
+        bool shouldDispose = false;
+        if (connection == null)
+        {
+            connection = await _connectionFactory.OpenConnectionAsync();
+            shouldDispose = true;
+        }
+
+        try
+        {
+            const string sql = "DELETE FROM user_roles WHERE role_id = @RoleId";
+            await connection.ExecuteAsync(sql, new { RoleId = roleId }, transaction);
+        }
+        finally
+        {
+            if (shouldDispose && connection is IAsyncDisposable asyncDisposable)
+                await asyncDisposable.DisposeAsync();
+        }
+    }
+
+    public Task DeleteByRoleIdAsync(Guid roleId, CancellationToken cancellationToken = default)
+        => DeleteByRoleIdInternalAsync(roleId, null, null, cancellationToken);
+
+    public Task DeleteByRoleIdAsync(Guid roleId, DbConnection connection, DbTransaction transaction,
+        CancellationToken cancellationToken = default)
+        => DeleteByRoleIdInternalAsync(roleId, connection, transaction, cancellationToken);
 
     public async Task<bool> ExistsAsync(Guid userId, Guid roleId, CancellationToken cancellationToken = default)
     {

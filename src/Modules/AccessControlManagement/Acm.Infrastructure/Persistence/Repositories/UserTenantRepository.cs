@@ -1,3 +1,4 @@
+using System.Data;
 using Acm.Application.Repositories;
 using Acm.Domain.Entities;
 using Common.Application.Data;
@@ -14,7 +15,8 @@ public class UserTenantRepository : IUserTenantRepository
         _connectionFactory = connectionFactory;
     }
 
-    public async Task<IEnumerable<UserTenant>> GetUserTenantsAsync(Guid userId, CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<UserTenant>> GetUserTenantsAsync(Guid userId,
+        CancellationToken cancellationToken = default)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync();
 
@@ -27,7 +29,8 @@ public class UserTenantRepository : IUserTenantRepository
         return await connection.QueryAsync<UserTenant>(sql, new { UserId = userId });
     }
 
-    public async Task<IEnumerable<UserTenant>> GetTenantUsersAsync(Guid tenantId, CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<UserTenant>> GetTenantUsersAsync(Guid tenantId,
+        CancellationToken cancellationToken = default)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync();
 
@@ -40,7 +43,8 @@ public class UserTenantRepository : IUserTenantRepository
         return await connection.QueryAsync<UserTenant>(sql, new { TenantId = tenantId });
     }
 
-    public async Task<UserTenant?> GetUserTenantAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken = default)
+    public async Task<UserTenant?> GetUserTenantAsync(Guid userId, Guid tenantId,
+        CancellationToken cancellationToken = default)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync();
 
@@ -64,19 +68,57 @@ public class UserTenantRepository : IUserTenantRepository
         return userTenant.Id;
     }
 
-    public async Task RemoveUserFromTenantAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken = default)
+    public async Task<Guid> AddUserToTenantAsync(UserTenant userTenant, IDbConnection connection,
+        IDbTransaction transaction, CancellationToken cancellationToken = default)
     {
-        await using var connection = await _connectionFactory.OpenConnectionAsync();
-
         const string sql = @"
-            UPDATE user_tenants 
-            SET is_active = false, left_at = @LeftAt
-            WHERE user_id = @UserId AND tenant_id = @TenantId";
+            INSERT INTO user_tenants (id, user_id, tenant_id, is_active, joined_at, left_at, invited_by)
+            VALUES (@Id, @UserId, @TenantId, @IsActive, @JoinedAt, @LeftAt, @InvitedBy)";
 
-        await connection.ExecuteAsync(sql, new { UserId = userId, TenantId = tenantId, LeftAt = DateTime.UtcNow });
+        await connection.ExecuteAsync(sql, userTenant, transaction);
+        return userTenant.Id;
+    }
+    
+    private async Task RemoveUserFromTenantAsyncInternal(
+        Guid userId,
+        Guid tenantId,
+        IDbConnection? connection = null,
+        IDbTransaction? transaction = null,
+        CancellationToken cancellationToken = default)
+    {
+        bool shouldDispose = false;
+        if (connection == null)
+        {
+            connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+            shouldDispose = true;
+        }
+
+        try
+        {
+            const string sql = @"
+                UPDATE user_tenants 
+                SET is_active = false, left_at = @LeftAt
+                WHERE user_id = @UserId AND tenant_id = @TenantId";
+
+            await connection.ExecuteAsync(sql, new { UserId = userId, TenantId = tenantId }, transaction);
+        }
+        finally
+        {
+            if (shouldDispose && connection is IAsyncDisposable asyncDisposable)
+                await asyncDisposable.DisposeAsync();
+        }
     }
 
-    public async Task<bool> IsUserMemberOfTenantAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken = default)
+    public Task RemoveUserFromTenantAsync(Guid userId, Guid tenantId,
+        CancellationToken cancellationToken = default)
+        => RemoveUserFromTenantAsyncInternal(userId, tenantId, null, null, cancellationToken);
+    
+    public Task RemoveUserFromTenantAsync(Guid userId, Guid tenantId, IDbConnection connection,
+        IDbTransaction transaction, CancellationToken cancellationToken = default)
+        => RemoveUserFromTenantAsyncInternal(userId, tenantId, connection, transaction, cancellationToken);
+
+    public async Task<bool> IsUserMemberOfTenantAsync(Guid userId, Guid tenantId,
+        CancellationToken cancellationToken = default)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync();
 
@@ -85,10 +127,12 @@ public class UserTenantRepository : IUserTenantRepository
             FROM user_tenants 
             WHERE user_id = @UserId AND tenant_id = @TenantId AND is_active = true";
 
-        return await connection.QueryFirstOrDefaultAsync<int?>(sql, new { UserId = userId, TenantId = tenantId }) is not null;
+        return await connection.QueryFirstOrDefaultAsync<int?>(sql, new { UserId = userId, TenantId = tenantId }) is not
+            null;
     }
 
-    public async Task<IEnumerable<Tenant>> GetUserAccessibleTenantsAsync(Guid userId, CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<Tenant>> GetUserAccessibleTenantsAsync(Guid userId,
+        CancellationToken cancellationToken = default)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync();
 

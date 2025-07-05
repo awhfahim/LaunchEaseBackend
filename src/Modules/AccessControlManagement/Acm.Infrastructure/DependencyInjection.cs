@@ -1,4 +1,5 @@
 using Acm.Application;
+using Acm.Application.Interfaces;
 using Acm.Application.Repositories;
 using Acm.Application.Services;
 using Acm.Infrastructure.Authorization;
@@ -28,13 +29,19 @@ public static class DependencyInjection
         services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
 
         // Data Access Layer - Repositories
-        services.TryAddScoped<IUserRepository, UserRepository>();
+        services.TryAddScoped<IUserRepository, EnhancedUserRepository>();
         services.TryAddScoped<IRoleRepository, RoleRepository>();
         services.TryAddScoped<IUserRoleRepository, UserRoleRepository>();
         services.TryAddScoped<IUserClaimRepository, UserClaimRepository>();
         services.TryAddScoped<IRoleClaimRepository, RoleClaimRepository>();
         services.TryAddScoped<ITenantRepository, TenantRepository>();
         services.TryAddScoped<IUserTenantRepository, UserTenantRepository>();
+        
+        // Enhanced Unit of Work for ACM
+        services.TryAddScoped<IAcmUnitOfWork, AcmUnitOfWork>();
+        
+        // Services
+        services.TryAddScoped<UserService>();
 
         // Services
         services.TryAddScoped<IAuthenticationService, AuthenticationService>();

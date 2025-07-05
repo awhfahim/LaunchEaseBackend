@@ -1,10 +1,10 @@
 using System.Security.Claims;
 using System.Text.Json;
+using Common.Application.Misc;
+using Common.HttpApi.DTOs;
 using Common.HttpApi.Others;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using SharpOutcome.Helpers.Contracts;
-using SharpOutcome.Helpers.Enums;
 
 namespace Common.HttpApi.Controllers;
 
@@ -17,53 +17,25 @@ public abstract class JsonApiControllerBase : ControllerBase
     {
         return ControllerContext.MakeResponse(code, data);
     }
-    protected IActionResult HttpBadOutcomeResponse(IBadOutcome<HttpBadOutcomeTag> error)
+    
+    protected IActionResult FromResult<T>(Result<T> result, Func<T, IActionResult> onSuccess)
     {
-        return error.Tag switch
+        if (result.IsSuccess)
+            return onSuccess(result.Value!);
+
+        var errorResponse = ApiResponse<T>.ErrorResult(result.Error ?? "An error occurred");
+        return result.ErrorType switch
         {
-            HttpBadOutcomeTag.Conflict => ControllerContext.MakeResponse(StatusCodes.Status409Conflict,
-                error.Reason),
-            HttpBadOutcomeTag.BadRequest => ControllerContext.MakeResponse(StatusCodes.Status400BadRequest,
-                error.Reason),
-            HttpBadOutcomeTag.NotFound => ControllerContext.MakeResponse(StatusCodes.Status404NotFound,
-                error.Reason),
-            HttpBadOutcomeTag.Unauthorized => ControllerContext.MakeResponse(
-                StatusCodes.Status401Unauthorized, error.Reason),
-            HttpBadOutcomeTag.Forbidden => ControllerContext.MakeResponse(StatusCodes.Status403Forbidden,
-                error.Reason),
-            HttpBadOutcomeTag.NotImplemented => ControllerContext.MakeResponse(
-                StatusCodes.Status501NotImplemented, error.Reason),
-            HttpBadOutcomeTag.RequestTimeout => ControllerContext.MakeResponse(
-                StatusCodes.Status408RequestTimeout, error.Reason),
-            HttpBadOutcomeTag.InternalServerError => ControllerContext.MakeResponse(
-                StatusCodes.Status500InternalServerError, error.Reason),
-            _ => ControllerContext.MakeResponse(StatusCodes.Status400BadRequest, error.Reason)
+            ErrorType.NotFound => NotFound(errorResponse),
+            ErrorType.BadRequest => BadRequest(errorResponse),
+            ErrorType.Conflict => Conflict(errorResponse),
+            ErrorType.Forbidden => Forbid(),
+            ErrorType.Unauthorized => Unauthorized(errorResponse),
+            ErrorType.Validation => UnprocessableEntity(errorResponse),
+            _ => StatusCode(500, errorResponse)
         };
     }
 
-    protected IActionResult BadOutcomeResponse(IBadOutcome error)
-    {
-        return error.Tag switch
-        {
-            BadOutcomeTag.Conflict => ControllerContext.MakeResponse(StatusCodes.Status409Conflict,
-                error.Reason),
-            BadOutcomeTag.BadRequest => ControllerContext.MakeResponse(StatusCodes.Status400BadRequest,
-                error.Reason),
-            BadOutcomeTag.NotFound => ControllerContext.MakeResponse(StatusCodes.Status404NotFound,
-                error.Reason),
-            BadOutcomeTag.Unauthorized => ControllerContext.MakeResponse(
-                StatusCodes.Status401Unauthorized, error.Reason),
-            BadOutcomeTag.Forbidden => ControllerContext.MakeResponse(StatusCodes.Status403Forbidden,
-                error.Reason),
-            BadOutcomeTag.Timeout => ControllerContext.MakeResponse(
-                StatusCodes.Status408RequestTimeout, error.Reason),
-            BadOutcomeTag.Duplicate => ControllerContext.MakeResponse(StatusCodes.Status409Conflict,
-                error.Reason),
-            BadOutcomeTag.Unknown => ControllerContext.MakeResponse(
-                StatusCodes.Status500InternalServerError, error.Reason),
-            _ => ControllerContext.MakeResponse(StatusCodes.Status400BadRequest, error.Reason)
-        };
-    }
 
     protected static IActionResult DynamicQueryResponse<T>(IEnumerable<T> dataFromDb, long count, int pageSize,
         JsonSerializerOptions? opts = null)

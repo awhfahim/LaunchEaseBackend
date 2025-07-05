@@ -34,7 +34,7 @@ public record CreateUserRequest
 
     public string? PhoneNumber { get; set; }
 
-    public ICollection<string> Roles { get; set; } = new List<string>();
+    public Guid RoleId { get; set; }
 }
 
 public record UpdateUserRequest
@@ -131,6 +131,4 @@ public class InviteUserRequest
     [Required]
     [EmailAddress]
     public required string Email { get; set; }
-
-    public ICollection<string> Roles { get; set; } = new List<string>();
 }

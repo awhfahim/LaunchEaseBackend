@@ -15,7 +15,6 @@
         <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
         <PackageReference Include="Serilog.Sinks.Email" Version="4.0.0" />
         <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
-        <PackageReference Include="SharpOutcome" Version="1.1.0" />
     </ItemGroup>
     <ItemGroup>
       <PackageReference Update="SonarAnalyzer.CSharp" Version="9.32.0.97167">

@@ -8,6 +8,7 @@ using System.Security;
 using System.Security.Authentication;
 using Acm.Api.DTOs.Responses;
 using Acm.Infrastructure.Authorization.Exceptions;
+using Common.HttpApi.DTOs;
 
 namespace LaunchEase.Api.Others;
 

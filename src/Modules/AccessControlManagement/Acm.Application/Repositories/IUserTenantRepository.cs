@@ -1,3 +1,4 @@
+using System.Data;
 using Acm.Domain.Entities;
 
 namespace Acm.Application.Repositories;
@@ -11,4 +12,10 @@ public interface IUserTenantRepository
     Task RemoveUserFromTenantAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken = default);
     Task<bool> IsUserMemberOfTenantAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken = default);
     Task<IEnumerable<Tenant>> GetUserAccessibleTenantsAsync(Guid userId, CancellationToken cancellationToken = default);
+
+    Task<Guid> AddUserToTenantAsync(UserTenant userTenant, IDbConnection connection,
+        IDbTransaction transaction, CancellationToken cancellationToken = default);
+
+    Task RemoveUserFromTenantAsync(Guid userId, Guid tenantId, IDbConnection connection,
+        IDbTransaction transaction, CancellationToken cancellationToken = default);
 }

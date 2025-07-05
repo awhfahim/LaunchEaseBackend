@@ -2,7 +2,9 @@
 using Common.Application.Options;
 using Common.Application.Providers;
 using Common.Application.Services;
+using Common.Domain.Interfaces;
 using Common.Infrastructure.Extensions;
+using Common.Infrastructure.Persistence;
 using Common.Infrastructure.Providers;
 using Common.Infrastructure.Services;
 using Microsoft.Extensions.Configuration;
@@ -55,6 +57,9 @@ public static class DependencyInjection
         services.AddScoped<IEmailService, EmailService>();
 
         services.AddScoped<IDbConnectionFactory, PgConnectionFactory>();
+
+        // Register Dapper Unit of Work
+        services.AddScoped<IDapperUnitOfWork, DapperUnitOfWork>();
 
         return services;
     }

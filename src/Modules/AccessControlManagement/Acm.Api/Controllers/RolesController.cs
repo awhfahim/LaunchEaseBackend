@@ -8,6 +8,7 @@ using Acm.Infrastructure.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using Common.HttpApi.Controllers;
+using Common.HttpApi.DTOs;
 
 namespace Acm.Api.Controllers;
 
