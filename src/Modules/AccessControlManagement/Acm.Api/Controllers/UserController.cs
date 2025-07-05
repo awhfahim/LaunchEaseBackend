@@ -1,3 +1,4 @@
+using System.Globalization;
 using Acm.Api.DTOs.Requests;
 using Acm.Api.DTOs.Responses;
 using Acm.Application.DataTransferObjects.Request;
@@ -115,14 +116,13 @@ public class UserController : JsonApiControllerBase
             FirstName = request.FirstName,
             LastName = request.LastName,
             PasswordHash = hashedPassword,
-            SecurityStamp = Guid.NewGuid().ToString(),
+            SecurityStamp = _dateTimeProvider.CurrentUtcTime.ToString(CultureInfo.InvariantCulture),
             PhoneNumber = request.PhoneNumber,
             IsEmailConfirmed = false, //Todo: Email Verification Required
             CreatedAt = _dateTimeProvider.CurrentUtcTime
         };
 
-        var result =
-            await _userService.CreateUserWithTenantAsync(user, tenantId, request.RoleId,
+        var result = await _userService.CreateUserWithTenantAsync(user, tenantId, request.RoleId,
                 HttpContext.RequestAborted);
 
         return FromResult(result, createdUser => CreatedAtAction(nameof(GetUser), new { id = createdUser.Id },

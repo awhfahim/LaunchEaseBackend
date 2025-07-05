@@ -85,8 +85,7 @@ public class UserRoleRepository : IUserRoleRepository
         }
     }
 
-    public Task<Guid> CreateAsync(UserRole userRole,
-        CancellationToken cancellationToken = default)
+    public Task<Guid> CreateAsync(UserRole userRole, CancellationToken cancellationToken = default)
         => CreateAsyncInternal(userRole, null, null, cancellationToken);
 
     public Task<Guid> CreateAsync(UserRole userRole, IDbConnection connection, IDbTransaction transaction)
