@@ -20,19 +20,19 @@ namespace Acm.Api.Controllers;
 [Route("api/users")]
 [Authorize]
 [RequireTenant]
-public class UsersController : JsonApiControllerBase
+public class UserController : JsonApiControllerBase
 {
     private readonly IAuthenticationService _authenticationService;
     private readonly IDateTimeProvider _dateTimeProvider;
     private readonly IGuidProvider _guidProvider;
     private readonly IUserService _userService;
-    private readonly LazyService<ILogger<UsersController>> _logger;
+    private readonly LazyService<ILogger<UserController>> _logger;
 
-    public UsersController(
+    public UserController(
         IAuthenticationService authenticationService,
         IDateTimeProvider dateTimeProvider,
         IGuidProvider guidProvider,
-        IUserService userService, LazyService<ILogger<UsersController>> logger)
+        IUserService userService, LazyService<ILogger<UserController>> logger)
     {
         _authenticationService = authenticationService;
         _dateTimeProvider = dateTimeProvider;
