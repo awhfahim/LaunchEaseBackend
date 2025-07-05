@@ -1,3 +1,4 @@
+using System.Data;
 using Acm.Application.DataTransferObjects.Request;
 using Acm.Application.Interfaces;
 using Acm.Domain.Entities;
@@ -280,23 +281,16 @@ public class UserService : IUserService
         return _unitOfWork.Value.Users.EmailExistsAsync(email, cancellationToken);
     }
 
-    public async Task<bool> DeleteUserAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken)
+    public async Task<Result<bool>> DeleteUserAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken)
     {
         return await _unitOfWork.Value.ExecuteInTransactionAsync(async (connection, transaction) =>
         {
-            var userExists =
-                await _unitOfWork.Value.Users.ExistsAsync(userId, connection, transaction, cancellationToken);
-            if (!userExists)
-            {
-                throw new InvalidOperationException($"User with ID {userId} does not exist");
-            }
+            var result =
+                await UserExistsAndIsMemberOfTenantAsync(userId, tenantId, cancellationToken: cancellationToken);
 
-            var isMember =
-                await _unitOfWork.Value.UserTenants.IsUserMemberOfTenantAsync(userId, tenantId, cancellationToken);
-
-            if (!isMember)
+            if (!result.IsSuccess)
             {
-                throw new InvalidOperationException($"User with ID {userId} is not a member of tenant {tenantId}");
+                return result;
             }
 
             await _unitOfWork.Value.UserClaims.DeleteByUserIdAsync(userId, tenantId, connection, transaction,
@@ -310,21 +304,14 @@ public class UserService : IUserService
         }, cancellationToken: cancellationToken);
     }
 
-    public async Task<bool> AssignRoleToUserAsync(Guid userId, ICollection<Guid> roleIds, Guid tenantId,
+    public async Task<Result<bool>> AssignRoleToUserAsync(Guid userId, ICollection<Guid> roleIds, Guid tenantId,
         CancellationToken cancellationToken)
     {
-        var userExists = await _unitOfWork.Value.Users.ExistsAsync(userId, cancellationToken);
-        if (!userExists)
-        {
-            throw new InvalidOperationException($"User with ID {userId} does not exist");
-        }
+        var result = await UserExistsAndIsMemberOfTenantAsync(userId, tenantId, cancellationToken: cancellationToken);
 
-        var isMember =
-            await _unitOfWork.Value.UserTenants.IsUserMemberOfTenantAsync(userId, tenantId, cancellationToken);
-
-        if (!isMember)
+        if (!result.IsSuccess)
         {
-            throw new InvalidOperationException($"User with ID {userId} is not a member of tenant {tenantId}");
+            return result;
         }
 
         ICollection<UserRole> roles = [];
@@ -350,29 +337,20 @@ public class UserService : IUserService
         }
 
         await _unitOfWork.Value.UserRoles.CreateRangeAsync(roles);
-        _logger.LogInformation("Assigned {RoleCount} roles to user {UserId} in tenant {TenantId}", roles.Count, userId,
-            tenantId);
         return true;
     }
 
-    public Task<bool> RemoveRoleFromUserAsync(Guid userId, Guid tenantId, ICollection<Guid> roleIds,
+    public Task<Result<bool>> RemoveRoleFromUserAsync(Guid userId, Guid tenantId, ICollection<Guid> roleIds,
         CancellationToken cancellationToken)
     {
         return _unitOfWork.Value.ExecuteInTransactionAsync(async (connection, transaction) =>
         {
-            var userExists =
-                await _unitOfWork.Value.Users.ExistsAsync(userId, connection, transaction, cancellationToken);
-            if (!userExists)
-            {
-                throw new InvalidOperationException($"User with ID {userId} does not exist");
-            }
+            var result = await UserExistsAndIsMemberOfTenantAsync(userId, tenantId, connection, transaction,
+                cancellationToken);
 
-            var isMember =
-                await _unitOfWork.Value.UserTenants.IsUserMemberOfTenantAsync(userId, tenantId, cancellationToken);
-
-            if (!isMember)
+            if (!result.IsSuccess)
             {
-                throw new InvalidOperationException($"User with ID {userId} is not a member of tenant {tenantId}");
+                return result;
             }
 
             await _unitOfWork.Value.UserRoles.DeleteRangeAsync(userId, tenantId, roleIds);
@@ -381,20 +359,19 @@ public class UserService : IUserService
         }, cancellationToken: cancellationToken);
     }
 
-    public async Task<bool> InviteUserAsync(string email, Guid tenantId, CancellationToken cancellationToken = default)
+    public async Task<Result<bool>> InviteUserAsync(string email, Guid tenantId, CancellationToken cancellationToken = default)
     {
         var user = await _unitOfWork.Value.Users.GetByEmailAsync(email, cancellationToken);
         if (user == null)
         {
-            throw new InvalidOperationException(
-                $"User with this email {email} does not exist. Use CreateUser to create a new user.");
+            return Result<bool>.Failure("User not found", ErrorType.NotFound);
         }
 
         var isMember =
             await _unitOfWork.Value.UserTenants.IsUserMemberOfTenantAsync(user.Id, tenantId, cancellationToken);
         if (isMember)
         {
-            throw new InvalidOperationException($"User with email {email} is already a member of tenant {tenantId}");
+            return Result<bool>.Failure("User is already a member of the specified tenant", ErrorType.Conflict);
         }
 
         var userTenant = new UserTenant
@@ -414,6 +391,24 @@ public class UserService : IUserService
     public Task<bool> IsUserMemberOfTenantAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken)
     {
         return _unitOfWork.Value.UserTenants.IsUserMemberOfTenantAsync(userId, tenantId, cancellationToken);
+    }
+
+    private async Task<Result<bool>> UserExistsAndIsMemberOfTenantAsync(Guid userId, Guid tenantId,
+        IDbConnection? connection = null,
+        IDbTransaction? transaction = null, CancellationToken cancellationToken = default)
+    {
+        var userExists = await _unitOfWork.Value.Users.ExistsAsync(userId, connection, transaction, cancellationToken);
+        if (!userExists)
+        {
+            return Result<bool>.Failure("User does not exist", ErrorType.NotFound);
+        }
+
+        var isMember =
+            await _unitOfWork.Value.UserTenants.IsUserMemberOfTenantAsync(userId, tenantId, cancellationToken);
+
+        return !isMember
+            ? Result<bool>.Failure("User is not a member of the specified tenant", ErrorType.Forbidden)
+            : true;
     }
 }
 

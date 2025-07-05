@@ -6,12 +6,14 @@ using Acm.Domain.Entities;
 using Acm.Infrastructure.Authorization.Attributes;
 using Acm.Infrastructure.Authorization;
 using Common.Application.Providers;
+using Common.Application.Services;
 using Common.HttpApi.Controllers;
 using Common.HttpApi.DTOs;
 using Common.HttpApi.Others;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
+using Microsoft.Extensions.Logging;
 
 namespace Acm.Api.Controllers;
 
@@ -24,17 +26,19 @@ public class UsersController : JsonApiControllerBase
     private readonly IDateTimeProvider _dateTimeProvider;
     private readonly IGuidProvider _guidProvider;
     private readonly IUserService _userService;
+    private readonly LazyService<ILogger<UsersController>> _logger;
 
     public UsersController(
         IAuthenticationService authenticationService,
         IDateTimeProvider dateTimeProvider,
         IGuidProvider guidProvider,
-        IUserService userService)
+        IUserService userService, LazyService<ILogger<UsersController>> logger)
     {
         _authenticationService = authenticationService;
         _dateTimeProvider = dateTimeProvider;
         _guidProvider = guidProvider;
         _userService = userService;
+        _logger = logger;
     }
 
     [HttpGet]
@@ -167,16 +171,10 @@ public class UsersController : JsonApiControllerBase
     [RequirePermission(PermissionConstants.UsersDelete)]
     public async Task<IActionResult> DeleteUser([FromRoute, BindRequired] Guid id)
     {
-        try
-        {
-            var tenantId = GetTenantId();
-            await _userService.DeleteUserAsync(id, tenantId, HttpContext.RequestAborted);
-            return Ok(ApiResponse<object>.SuccessResult(new object(), "User removed from current tenant"));
-        }
-        catch (Exception)
-        {
-            return StatusCode(500, ApiResponse<object>.ErrorResult("An error occurred while deleting user"));
-        }
+        var tenantId = GetTenantId();
+        var result = await _userService.DeleteUserAsync(id, tenantId, HttpContext.RequestAborted);
+        return FromResult(result,
+            _ => Ok(ApiResponse<object>.SuccessResult(new object(), "User deleted successfully")));
     }
 
     [HttpPost("{id:guid}/assign-roles")]
@@ -192,12 +190,14 @@ public class UsersController : JsonApiControllerBase
                 return BadRequest(ApiResponse<object>.ErrorResult("Role IDs are required"));
             }
 
-            await _userService.AssignRoleToUserAsync(id, roleIds, tenantId, HttpContext.RequestAborted);
+            var result = await _userService.AssignRoleToUserAsync(id, roleIds, tenantId, HttpContext.RequestAborted);
 
-            return Ok(ApiResponse<object>.SuccessResult(new object(), "Roles assigned successfully"));
+            return FromResult(result,
+                _ => Ok(ApiResponse<object>.SuccessResult(new object(), "Roles assigned successfully")));
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            _logger.Value.LogError(ex, ex.Message);
             return StatusCode(500, ApiResponse<object>.ErrorResult("An error occurred while assigning roles"));
         }
     }
@@ -234,8 +234,8 @@ public class UsersController : JsonApiControllerBase
         {
             var tenantId = GetTenantId();
             var isAdded = await _userService.InviteUserAsync(request.Email, tenantId, HttpContext.RequestAborted);
-
-            return Ok(ApiResponse<bool>.SuccessResult(isAdded, "User invited to tenant successfully"));
+            return FromResult(isAdded,
+                _ => Ok(ApiResponse<object>.SuccessResult(new object(), "User invited to tenant successfully")));
         }
         catch (Exception)
         {

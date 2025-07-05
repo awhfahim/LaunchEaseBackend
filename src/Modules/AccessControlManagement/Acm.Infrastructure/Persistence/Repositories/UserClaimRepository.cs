@@ -137,6 +137,10 @@ public class UserClaimRepository : IUserClaimRepository
         {
             if (shouldDispose && connection is IAsyncDisposable asyncDisposable)
                 await asyncDisposable.DisposeAsync();
+            else if (connection is IDisposable disposable)
+            {
+                disposable.Dispose();
+            }
         }
     }
 

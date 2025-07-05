@@ -73,7 +73,7 @@ public interface IGenericRepository<TEntity, TKey> where TEntity : class
     /// <summary>
     /// Check if entity exists by ID with transaction support
     /// </summary>
-    Task<bool> ExistsAsync(TKey id, IDbConnection connection, IDbTransaction? transaction = null,
+    Task<bool> ExistsAsync(TKey id, IDbConnection? connection, IDbTransaction? transaction = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>

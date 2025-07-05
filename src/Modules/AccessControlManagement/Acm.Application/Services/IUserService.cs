@@ -26,15 +26,15 @@ public interface IUserService
     Task<User?> GetByIdAsync(Guid userId, CancellationToken cancellationToken);
     Task<User?> GetByEmailAsync(string email, CancellationToken cancellationToken);
     Task<bool> EmailExistsAsync(string email, CancellationToken cancellationToken);
-    Task<bool> DeleteUserAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken);
+    Task<Result<bool>> DeleteUserAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken);
 
-    Task<bool> AssignRoleToUserAsync(Guid userId, ICollection<Guid> roleIds, Guid tenantId,
+    Task<Result<bool>> AssignRoleToUserAsync(Guid userId, ICollection<Guid> roleIds, Guid tenantId,
         CancellationToken cancellationToken);
     
-    Task<bool> RemoveRoleFromUserAsync(Guid userId, Guid tenantId, ICollection<Guid> roleIds,
+    Task<Result<bool>> RemoveRoleFromUserAsync(Guid userId, Guid tenantId, ICollection<Guid> roleIds,
         CancellationToken cancellationToken);
     
-    Task<bool> InviteUserAsync(string email, Guid tenantId,
+    Task<Result<bool>> InviteUserAsync(string email, Guid tenantId,
         CancellationToken cancellationToken = default);
     
     Task<bool> IsUserMemberOfTenantAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken);

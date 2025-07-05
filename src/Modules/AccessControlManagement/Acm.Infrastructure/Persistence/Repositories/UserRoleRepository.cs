@@ -78,6 +78,10 @@ public class UserRoleRepository : IUserRoleRepository
         {
             if (shouldDispose && connection is IAsyncDisposable asyncDisposable)
                 await asyncDisposable.DisposeAsync();
+            else if (connection is IDisposable disposable)
+            {
+                disposable.Dispose();
+            }
         }
     }
 
@@ -146,6 +150,10 @@ public class UserRoleRepository : IUserRoleRepository
         {
             if (shouldDispose && connection is IAsyncDisposable asyncDisposable)
                 await asyncDisposable.DisposeAsync();
+            else if (connection is IDisposable disposable)
+            {
+                disposable.Dispose();
+            }
         }
     }
 
@@ -178,6 +186,10 @@ public class UserRoleRepository : IUserRoleRepository
         {
             if (shouldDispose && connection is IAsyncDisposable asyncDisposable)
                 await asyncDisposable.DisposeAsync();
+            else if (connection is IDisposable disposable)
+            {
+                disposable.Dispose();
+            }
         }
     }
 

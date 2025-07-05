@@ -147,11 +147,32 @@ public abstract class DapperGenericRepository<TEntity, TKey> : IGenericRepositor
         return rowsAffected > 0;
     }
 
-    public virtual async Task<bool> ExistsAsync(TKey id, IDbConnection connection, IDbTransaction? transaction = null,
+    public virtual async Task<bool> ExistsAsync(TKey id, IDbConnection? connection = null, IDbTransaction? transaction = null,
         CancellationToken cancellationToken = default)
     {
-        var sql = GetExistsSql();
-        return await connection.QuerySingleAsync<bool>(sql, new { Id = id }, transaction);
+        bool shouldDispose = false;
+        if (connection == null)
+        {
+            connection = await ConnectionFactory.OpenConnectionAsync(cancellationToken);
+            shouldDispose = true;
+        }
+        
+        try
+        {
+            var sql = GetExistsSql();
+            return await connection.QuerySingleAsync<bool>(sql, new { Id = id }, transaction);
+        }
+        finally
+        {
+            if (shouldDispose && connection is IAsyncDisposable asyncDisposable)
+            {
+                await asyncDisposable.DisposeAsync();
+            }
+            else if (connection is IDisposable disposable)
+            {
+                disposable.Dispose();
+            }
+        }
     }
 
     public virtual async Task<int> GetCountAsync(IDbConnection connection, IDbTransaction? transaction = null,
