@@ -1,6 +1,5 @@
 using Acm.Api.DTOs.Requests;
 using Acm.Api.DTOs.Responses;
-using Acm.Application.Repositories;
 using Acm.Application.Services;
 using Acm.Domain.Entities;
 using Acm.Infrastructure.Authorization.Attributes;

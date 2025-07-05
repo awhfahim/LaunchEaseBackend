@@ -1,9 +1,6 @@
 using System.Security.Claims;
-using System.Text.Json;
 using Common.Application.Misc;
 using Common.HttpApi.DTOs;
-using Common.HttpApi.Others;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Common.HttpApi.Controllers;
@@ -13,11 +10,6 @@ namespace Common.HttpApi.Controllers;
 [Produces("application/json")]
 public abstract class JsonApiControllerBase : ControllerBase
 {
-    protected IActionResult SendJsonResponse(int code, object? data = null)
-    {
-        return ControllerContext.MakeResponse(code, data);
-    }
-    
     protected IActionResult FromResult<T>(Result<T> result, Func<T, IActionResult> onSuccess)
     {
         if (result.IsSuccess)
@@ -33,22 +25,6 @@ public abstract class JsonApiControllerBase : ControllerBase
             ErrorType.Unauthorized => Unauthorized(errorResponse),
             ErrorType.Validation => UnprocessableEntity(errorResponse),
             _ => StatusCode(500, errorResponse)
-        };
-    }
-
-
-    protected static IActionResult DynamicQueryResponse<T>(IEnumerable<T> dataFromDb, long count, int pageSize,
-        JsonSerializerOptions? opts = null)
-    {
-        if (pageSize <= 0)
-        {
-            pageSize = 1;
-        }
-
-        var totalPages = (long)Math.Ceiling(count / (decimal)pageSize);
-        return new JsonResult(new { data = dataFromDb, last_row = count, last_page = totalPages }, opts)
-        {
-            StatusCode = StatusCodes.Status200OK
         };
     }
 
