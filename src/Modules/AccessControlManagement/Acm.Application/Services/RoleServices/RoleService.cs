@@ -1,6 +1,7 @@
 using Acm.Application.Repositories;
 using Acm.Domain.Entities;
 using Common.Application.Data;
+using Common.Application.Providers;
 using Common.Application.Services;
 using Microsoft.Extensions.Logging;
 
@@ -13,16 +14,18 @@ public class RoleService : IRoleService
     private readonly LazyService<IUserRoleRepository> _userRoleRepository;
     private readonly IDbConnectionFactory _dbConnectionFactory;
     private readonly ILogger<RoleService> _logger;
+    private readonly IGuidProvider _guidProvider;
 
     public RoleService(LazyService<IRoleRepository> roleRepository,
         LazyService<IRoleClaimRepository> roleClaimRepository, LazyService<IUserRoleRepository> userRoleRepository,
-        IDbConnectionFactory dbConnectionFactory, ILogger<RoleService> logger)
+        IDbConnectionFactory dbConnectionFactory, ILogger<RoleService> logger, IGuidProvider guidProvider)
     {
         _roleRepository = roleRepository;
         _roleClaimRepository = roleClaimRepository;
         _userRoleRepository = userRoleRepository;
         _dbConnectionFactory = dbConnectionFactory;
         _logger = logger;
+        _guidProvider = guidProvider;
     }
 
     public async Task<(bool result, string message)> DeleteRoleAsync(Guid roleId, Guid tenantId,
@@ -75,7 +78,7 @@ public class RoleService : IRoleService
             {
                 var roleClaim = new RoleClaim
                 {
-                    Id = Guid.NewGuid(),
+                    Id = _guidProvider.SortableGuid(),
                     RoleId = roleId,
                     MasterClaimId = claimId
                 };
@@ -83,6 +86,8 @@ public class RoleService : IRoleService
             }
 
             await _roleClaimRepository.Value.AddRangeAsync(claims, connection, transaction);
+
+            await transaction.CommitAsync();
 
             return (true, "Permissions assigned successfully");
         }

@@ -80,7 +80,7 @@ public class RoleClaimRepository : IRoleClaimRepository
     {
         const string sql = "DELETE FROM role_claims WHERE role_id = @RoleId";
 
-        await connection.ExecuteAsync(sql, new { Id = id }, transaction);
+        await connection.ExecuteAsync(sql, new { RoleId = id }, transaction);
     }
 
     public async Task DeleteAsync(Guid roleId, string claimType, string claimValue,
@@ -113,13 +113,13 @@ public class RoleClaimRepository : IRoleClaimRepository
         await connection.ExecuteAsync(DeleteByRoleIdSql, new { RoleId = roleId }, transaction);
     }
 
-    public Task AddRangeAsync(List<RoleClaim> claims, DbConnection connection, DbTransaction transaction)
+    public async Task AddRangeAsync(List<RoleClaim> claims, DbConnection connection, DbTransaction transaction)
     {
         const string sql = @"
             INSERT INTO role_claims (id, role_id, master_claim_id)
             VALUES (@Id, @RoleId, @MasterClaimId)";
 
-        return connection.ExecuteAsync(sql, claims, transaction);
+        var res = await connection.ExecuteAsync(sql, claims, transaction);
     }
 
     public async Task<bool> ExistsAsync(Guid roleId, string claimType, string claimValue,

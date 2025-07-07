@@ -8,17 +8,29 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Acm.Api.Controllers
 {
-    [Route("api/[controller]")]
+    [Route("api/[controller]s")]
     [Authorize]
-    public class PermissionsController : JsonApiControllerBase
+    public class PermissionController : JsonApiControllerBase
     {
         private readonly IPermissionManagementRepository _permissionRepository;
 
-        public PermissionsController(
+        public PermissionController(
             IPermissionManagementRepository permissionRepository)
         {
             _permissionRepository = permissionRepository;
         }
+        
+        #region Tenant Permission Management
+        
+        [HttpGet("tenant")]
+        [RequirePermission(PermissionConstants.RolesAndPermissionView)]
+        public async Task<ActionResult<IEnumerable<MasterClaimDto>>> GetTenantPermissions()
+        {
+            var permissions = await _permissionRepository.GetTenantPermissionsAsync("tenant");
+            return Ok(permissions);
+        }
+        
+        #endregion
 
         #region Master Permissions Management
 
@@ -41,41 +53,8 @@ namespace Acm.Api.Controllers
         [RequirePermission(PermissionConstants.SystemAdmin)]
         public async Task<ActionResult<IEnumerable<MasterClaimDto>>> GetPermissionsByCategory(string category)
         {
-            var permissions = await _permissionRepository.GetPermissionsByCategoryAsync(category);
+            var permissions = await _permissionRepository.GetTenantPermissionsAsync(category.ToLowerInvariant());
             return Ok(permissions);
-        }
-
-        /// <summary>
-        /// Create a new permission (system admin only)
-        /// </summary>
-        [HttpPost]
-        [RequirePermission(PermissionConstants.SystemAdmin)]
-        public async Task<ActionResult<MasterClaimDto>> CreatePermission([FromBody] CreatePermissionDto createPermissionDto)
-        {
-            var permission = await _permissionRepository.CreatePermissionAsync(createPermissionDto);
-            return CreatedAtAction(nameof(GetAllPermissions), permission);
-        }
-
-        /// <summary>
-        /// Update an existing permission
-        /// </summary>
-        [HttpPut("{permissionId}")]
-        [RequirePermission(PermissionConstants.SystemAdmin)]
-        public async Task<ActionResult<MasterClaimDto>> UpdatePermission(Guid permissionId, [FromBody] UpdatePermissionDto updatePermissionDto)
-        {
-            var permission = await _permissionRepository.UpdatePermissionAsync(permissionId, updatePermissionDto);
-            return Ok(permission);
-        }
-
-        /// <summary>
-        /// Delete a permission (removes from all roles and users)
-        /// </summary>
-        [HttpDelete("{permissionId}")]
-        [RequirePermission(PermissionConstants.SystemAdmin)]
-        public async Task<IActionResult> DeletePermission(Guid permissionId)
-        {
-            await _permissionRepository.DeletePermissionAsync(permissionId);
-            return NoContent();
         }
 
         #endregion
@@ -86,8 +65,8 @@ namespace Acm.Api.Controllers
         /// Get all permissions assigned to a role
         /// </summary>
         [HttpGet("roles/{roleId}")]
-        [RequirePermission(PermissionConstants.RolesView)]
-        public async Task<ActionResult<IEnumerable<RolePermissionDto>>> GetRolePermissions(Guid roleId)
+        [RequirePermission(PermissionConstants.RolesAndPermissionView)]
+        public async Task<IActionResult> GetRolePermissions(Guid roleId)
         {
             var permissions = await _permissionRepository.GetRolePermissionsAsync(roleId);
             return Ok(permissions);

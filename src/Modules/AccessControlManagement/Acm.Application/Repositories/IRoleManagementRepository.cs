@@ -21,7 +21,6 @@ public interface IRoleManagementRepository
     Task ReplaceUserRolesAsync(Guid userId, Guid tenantId, IEnumerable<Guid> roleIds);
 
     // Role Permission Management (integration with Permission Service)
-    Task<IEnumerable<RolePermissionDto>> GetRolePermissionsWithDetailsAsync(Guid roleId);
     Task AssignPermissionsToRoleAsync(Guid roleId, IEnumerable<string> permissions);
     Task RemovePermissionsFromRoleAsync(Guid roleId, IEnumerable<string> permissions);
     Task ReplaceRolePermissionsAsync(Guid roleId, IEnumerable<string> permissions);

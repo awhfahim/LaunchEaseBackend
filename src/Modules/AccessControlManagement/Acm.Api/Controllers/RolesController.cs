@@ -32,7 +32,7 @@ public class RolesController : JsonApiControllerBase
     }
 
     [HttpGet]
-    [RequirePermission(PermissionConstants.RolesView)]
+    [RequirePermission(PermissionConstants.RolesAndPermissionView)]
     public async Task<IActionResult> GetRoles()
     {
         try
@@ -48,7 +48,7 @@ public class RolesController : JsonApiControllerBase
     }
 
     [HttpGet("{id:guid}")]
-    [RequirePermission(PermissionConstants.RolesView)]
+    [RequirePermission(PermissionConstants.RolesAndPermissionView)]
     public async Task<IActionResult> GetRole([FromRoute] Guid id)
     {
         try
@@ -80,7 +80,7 @@ public class RolesController : JsonApiControllerBase
     }
 
     [HttpPost]
-    [RequirePermission(PermissionConstants.RolesCreate)]
+    [RequirePermission(PermissionConstants.RolesAndPermissionCreate)]
     public async Task<IActionResult> CreateRole([FromBody] CreateRoleRequest request)
     {
         try
@@ -124,7 +124,7 @@ public class RolesController : JsonApiControllerBase
     }
 
     [HttpPut("{id:guid}")]
-    [RequirePermission(PermissionConstants.RolesEdit)]
+    [RequirePermission(PermissionConstants.RolesAndPermissionEdit)]
     public async Task<IActionResult> UpdateRole([FromRoute] Guid id, [FromBody] UpdateRoleRequest request)
     {
         try
@@ -170,7 +170,7 @@ public class RolesController : JsonApiControllerBase
     }
 
     [HttpDelete("{id:guid}")]
-    [RequirePermission(PermissionConstants.RolesDelete)]
+    [RequirePermission(PermissionConstants.RolesAndPermissionDelete)]
     public async Task<IActionResult> DeleteRole([FromRoute] Guid id)
     {
         try
@@ -190,7 +190,7 @@ public class RolesController : JsonApiControllerBase
     }
 
     [HttpPost("{id:guid}/permissions")]
-    [RequirePermission(PermissionConstants.RolesEdit)]
+    [RequirePermission(PermissionConstants.RolesAndPermissionEdit)]
     public async Task<IActionResult> AssignPermissions([FromRoute] Guid id, [FromBody] AssignPermissionsRequest request)
     {
         try
@@ -212,7 +212,7 @@ public class RolesController : JsonApiControllerBase
     }
 
     [HttpGet("permissions")]
-    [RequirePermission(PermissionConstants.RolesView)]
+    [RequirePermission(PermissionConstants.RolesAndPermissionView)]
     public IActionResult GetAvailablePermissions()
     {
         //Todo: This should ideally be fetched from a configuration or database
@@ -225,10 +225,10 @@ public class RolesController : JsonApiControllerBase
             PermissionConstants.UsersDelete,
 
             // Role Management (Tenant-scoped)
-            PermissionConstants.RolesView,
-            PermissionConstants.RolesCreate,
-            PermissionConstants.RolesEdit,
-            PermissionConstants.RolesDelete,
+            PermissionConstants.RolesAndPermissionView,
+            PermissionConstants.RolesAndPermissionCreate,
+            PermissionConstants.RolesAndPermissionEdit,
+            PermissionConstants.RolesAndPermissionDelete,
 
             // Tenant Settings (Own tenant only)
             PermissionConstants.TenantSettingsView,

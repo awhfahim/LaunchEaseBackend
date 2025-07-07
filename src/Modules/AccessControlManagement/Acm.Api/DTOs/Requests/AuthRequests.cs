@@ -57,7 +57,7 @@ public record UpdateRoleRequest
 
 public class AssignPermissionsRequest
 {
-    public required ICollection<Guid> Permissions { get; set; }
+    public required ICollection<Guid> Permissions { get; set; } = [];
 }
 
 public class InitialLoginRequest

@@ -280,12 +280,6 @@ public class RoleManagementRepository : IRoleManagementRepository
         #endregion
 
         #region Role Permission Management
-
-        public async Task<IEnumerable<RolePermissionDto>> GetRolePermissionsWithDetailsAsync(Guid roleId)
-        {
-            return await _permissionRepository.GetRolePermissionsAsync(roleId);
-        }
-
         public async Task AssignPermissionsToRoleAsync(Guid roleId, IEnumerable<string> permissions)
         {
             await _permissionRepository.AssignPermissionsToRoleAsync(roleId, permissions);

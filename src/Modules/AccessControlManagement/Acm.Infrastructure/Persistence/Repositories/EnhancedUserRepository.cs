@@ -109,7 +109,8 @@ public class EnhancedUserRepository : DapperGenericRepository<User, Guid>, IUser
               AND (
                 @SearchQuery IS NULL
                 OR u.email % @SearchQuery
-                OR (u.first_name || ' ' || u.last_name) % @SearchQuery
+                OR u.first_name % @SearchQuery
+                OR u.last_name % @SearchQuery
               );
             
             SELECT u.id, u.email, u.first_name, u.last_name, u.password_hash, u.security_stamp,
@@ -123,7 +124,8 @@ public class EnhancedUserRepository : DapperGenericRepository<User, Guid>, IUser
               AND (
                 @SearchQuery IS NULL
                 OR u.email % @SearchQuery
-                OR (u.first_name || ' ' || u.last_name) % @SearchQuery
+                OR u.first_name % @SearchQuery
+                OR u.last_name % @SearchQuery
               )
             ORDER BY u.created_at DESC
             LIMIT @Limit OFFSET @Offset;";

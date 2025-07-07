@@ -14,8 +14,6 @@ public class PermissionManagementRepository: IPermissionManagementRepository
             _connectionFactory = connectionFactory;
         }
 
-        #region Master Claims/Permissions Management
-
         public async Task<IEnumerable<MasterClaimDto>> GetAllPermissionsAsync()
         {
             await using var connection = await _connectionFactory.OpenConnectionAsync();
@@ -29,127 +27,30 @@ public class PermissionManagementRepository: IPermissionManagementRepository
             return await connection.QueryAsync<MasterClaimDto>(sql);
         }
 
-        public async Task<IEnumerable<MasterClaimDto>> GetPermissionsByCategoryAsync(string category)
+        public async Task<IEnumerable<MasterClaimDto>> GetTenantPermissionsAsync(string category)
         {
             await using var connection = await _connectionFactory.OpenConnectionAsync();
             
             const string sql = @"
-                SELECT id, claim_type, claim_value, display_name, description, category, 
-                       is_tenant_scoped, is_system_permission, created_at, updated_at
-                FROM master_claims 
-                WHERE category = @Category
+                SELECT master_claims.id, claim_type, claim_value, display_name, description
+                FROM master_claims
+                JOIN master_claims_category mcc on master_claims.category_id = mcc.id
+                WHERE mcc.name = @Category
                 ORDER BY display_name";
 
             return await connection.QueryAsync<MasterClaimDto>(sql, new { Category = category });
         }
 
-        public async Task<MasterClaimDto> CreatePermissionAsync(CreatePermissionDto createPermissionDto)
-        {
-            await using var connection = await _connectionFactory.OpenConnectionAsync();
-            
-            var id = Guid.NewGuid();
-            var now = DateTime.UtcNow;
-
-            const string sql = @"
-                INSERT INTO master_claims (id, claim_type, claim_value, display_name, description, 
-                                         category, is_tenant_scoped, is_system_permission, created_at, updated_at)
-                VALUES (@Id, @ClaimType, @ClaimValue, @DisplayName, @Description, 
-                        @Category, @IsTenantScoped, @IsSystemPermission, @CreatedAt, @UpdatedAt)
-                RETURNING id, claim_type, claim_value, display_name, description, category, 
-                         is_tenant_scoped, is_system_permission, created_at, updated_at";
-
-            return await connection.QuerySingleAsync<MasterClaimDto>(sql, new
-            {
-                Id = id,
-                ClaimType = createPermissionDto.ClaimType ?? "permission",
-                createPermissionDto.ClaimValue,
-                createPermissionDto.DisplayName,
-                createPermissionDto.Description,
-                createPermissionDto.Category,
-                createPermissionDto.IsTenantScoped,
-                createPermissionDto.IsSystemPermission,
-                CreatedAt = now,
-                UpdatedAt = now
-            });
-        }
-
-        public async Task<MasterClaimDto> UpdatePermissionAsync(Guid permissionId, UpdatePermissionDto updatePermissionDto)
+        public async Task<IEnumerable<Guid>> GetRolePermissionsAsync(Guid roleId)
         {
             await using var connection = await _connectionFactory.OpenConnectionAsync();
             
             const string sql = @"
-                UPDATE master_claims 
-                SET display_name = @DisplayName, 
-                    description = @Description, 
-                    category = @Category,
-                    is_tenant_scoped = @IsTenantScoped,
-                    is_system_permission = @IsSystemPermission,
-                    updated_at = @UpdatedAt
-                WHERE id = @Id
-                RETURNING id, claim_type, claim_value, display_name, description, category, 
-                         is_tenant_scoped, is_system_permission, created_at, updated_at";
+                SELECT r.master_claim_id
+                    FROM role_claims r 
+                WHERE r.role_id = @RoleId";
 
-            return await connection.QuerySingleAsync<MasterClaimDto>(sql, new
-            {
-                Id = permissionId,
-                updatePermissionDto.DisplayName,
-                updatePermissionDto.Description,
-                updatePermissionDto.Category,
-                updatePermissionDto.IsTenantScoped,
-                updatePermissionDto.IsSystemPermission,
-                UpdatedAt = DateTime.UtcNow
-            });
-        }
-
-        public async Task DeletePermissionAsync(Guid permissionId)
-        {
-            await using var connection = await _connectionFactory.OpenConnectionAsync();
-            await using var transaction = await connection.BeginTransactionAsync();
-
-            try
-            {
-                // First remove this permission from all roles and users
-                const string deleteFromRolesSql = @"
-                    DELETE FROM role_claims 
-                    WHERE claim_value = (SELECT claim_value FROM master_claims WHERE id = @PermissionId)";
-
-                const string deleteFromUsersSql = @"
-                    DELETE FROM user_claims 
-                    WHERE claim_value = (SELECT claim_value FROM master_claims WHERE id = @PermissionId)";
-
-                const string deleteMasterClaimSql = @"
-                    DELETE FROM master_claims WHERE id = @PermissionId";
-
-                await connection.ExecuteAsync(deleteFromRolesSql, new { PermissionId = permissionId }, transaction);
-                await connection.ExecuteAsync(deleteFromUsersSql, new { PermissionId = permissionId }, transaction);
-                await connection.ExecuteAsync(deleteMasterClaimSql, new { PermissionId = permissionId }, transaction);
-
-                await transaction.CommitAsync();
-            }
-            catch
-            {
-                await transaction.RollbackAsync();
-                throw;
-            }
-        }
-
-        #endregion
-
-        #region Role Permission Management
-
-        public async Task<IEnumerable<RolePermissionDto>> GetRolePermissionsAsync(Guid roleId)
-        {
-            await using var connection = await _connectionFactory.OpenConnectionAsync();
-            
-            const string sql = @"
-                SELECT rc.id, rc.role_id, rc.claim_type, rc.claim_value,
-                       mc.display_name, mc.description, mc.category, mc.is_tenant_scoped, mc.is_system_permission
-                FROM role_claims rc
-                JOIN master_claims mc ON rc.claim_value = mc.claim_value
-                WHERE rc.role_id = @RoleId
-                ORDER BY mc.category, mc.display_name";
-
-            return await connection.QueryAsync<RolePermissionDto>(sql, new { RoleId = roleId });
+            return await connection.QueryAsync<Guid>(sql, new { RoleId = roleId });
         }
 
         public async Task AssignPermissionsToRoleAsync(Guid roleId, IEnumerable<string> claimValues)
@@ -208,8 +109,6 @@ public class PermissionManagementRepository: IPermissionManagementRepository
                 throw;
             }
         }
-
-        #endregion
 
         #region User Permission Management
 
