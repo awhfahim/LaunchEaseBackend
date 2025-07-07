@@ -1,4 +1,6 @@
 using Acm.Application.DataTransferObjects;
+using Acm.Application.DataTransferObjects.Request;
+using Acm.Application.DataTransferObjects.Response;
 using Acm.Application.Repositories;
 using Acm.Domain.Entities;
 using Common.Application.Providers;

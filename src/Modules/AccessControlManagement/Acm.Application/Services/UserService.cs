@@ -1,5 +1,6 @@
 using System.Data;
 using Acm.Application.DataTransferObjects.Request;
+using Acm.Application.DataTransferObjects.Response;
 using Acm.Application.Interfaces;
 using Acm.Domain.Entities;
 using Common.Application.Misc;
@@ -11,12 +12,12 @@ namespace Acm.Application.Services;
 
 public class UserService : IUserService
 {
-    private readonly LazyService<IAcmUnitOfWork> _unitOfWork;
+    private readonly IAcmUnitOfWork _unitOfWork;
     private readonly ILogger<UserService> _logger;
     private readonly IGuidProvider _guidProvider;
     private readonly LazyService<IDateTimeProvider> _dateTimeProvider;
 
-    public UserService(LazyService<IAcmUnitOfWork> unitOfWork,
+    public UserService(IAcmUnitOfWork unitOfWork,
         ILogger<UserService> logger,
         IGuidProvider guidProvider,
         LazyService<IDateTimeProvider> dateTimeProvider)
@@ -30,17 +31,17 @@ public class UserService : IUserService
     public async Task<Result<User>> CreateUserWithTenantAsync(User user, Guid tenantId, Guid roleId,
         CancellationToken cancellationToken = default)
     {
-        return await _unitOfWork.Value.ExecuteInTransactionAsync(async (connection, transaction) =>
+        return await _unitOfWork.ExecuteInTransactionAsync(async (connection, transaction) =>
         {
             var emailExists =
-                await _unitOfWork.Value.Users.EmailExistsAsync(user.Email, connection, transaction,
+                await _unitOfWork.Users.EmailExistsAsync(user.Email, connection, transaction,
                     cancellationToken);
             if (emailExists)
             {
                 return Result<User>.Failure("Email already exists", ErrorType.Conflict);
             }
 
-            var userId = await _unitOfWork.Value.Users.InsertAsync(user, connection, transaction,
+            var userId = await _unitOfWork.Users.InsertAsync(user, connection, transaction,
                 cancellationToken);
 
             var userTenant = new UserTenant
@@ -52,7 +53,7 @@ public class UserService : IUserService
                 JoinedAt = _dateTimeProvider.Value.CurrentUtcTime,
                 InvitedBy = null
             };
-            await _unitOfWork.Value.UserTenants.AddUserToTenantAsync(userTenant, connection, transaction,
+            await _unitOfWork.UserTenants.AddUserToTenantAsync(userTenant, connection, transaction,
                 cancellationToken);
 
             var userRole = new UserRole
@@ -63,7 +64,7 @@ public class UserService : IUserService
                 TenantId = tenantId
             };
 
-            await _unitOfWork.Value.UserRoles.CreateAsync(userRole, connection, transaction);
+            await _unitOfWork.UserRoles.CreateAsync(userRole, connection, transaction);
             return user;
         }, cancellationToken: cancellationToken);
     }
@@ -73,12 +74,12 @@ public class UserService : IUserService
     {
         try
         {
-            await _unitOfWork.Value.ExecuteInTransactionAsync(async (connection, transaction) =>
+            await _unitOfWork.ExecuteInTransactionAsync(async (connection, transaction) =>
             {
                 _logger.LogInformation("Updating security information for user {UserId}", userId);
 
                 // 1. Check if user exists
-                var user = await _unitOfWork.Value.Users.GetByIdAsync(userId, connection, transaction,
+                var user = await _unitOfWork.Users.GetByIdAsync(userId, connection, transaction,
                     cancellationToken);
                 if (user == null)
                 {
@@ -86,15 +87,15 @@ public class UserService : IUserService
                 }
 
                 // 2. Update password hash
-                await _unitOfWork.Value.Users.SetPasswordHashAsync(userId, newPasswordHash, connection, transaction,
+                await _unitOfWork.Users.SetPasswordHashAsync(userId, newPasswordHash, connection, transaction,
                     cancellationToken);
 
                 // 3. Update security stamp
-                await _unitOfWork.Value.Users.SetSecurityStampAsync(userId, newSecurityStamp, connection, transaction,
+                await _unitOfWork.Users.SetSecurityStampAsync(userId, newSecurityStamp, connection, transaction,
                     cancellationToken);
 
                 // 4. Reset access failed count
-                await _unitOfWork.Value.Users.SetAccessFailedCountAsync(userId, 0, connection, transaction,
+                await _unitOfWork.Users.SetAccessFailedCountAsync(userId, 0, connection, transaction,
                     cancellationToken);
 
                 _logger.LogInformation("Security information updated successfully for user {UserId}", userId);
@@ -113,14 +114,14 @@ public class UserService : IUserService
     {
         try
         {
-            var user = await _unitOfWork.Value.Users.GetByIdAsync(userId, cancellationToken);
+            var user = await _unitOfWork.Users.GetByIdAsync(userId, cancellationToken);
             if (user == null)
             {
                 throw new InvalidOperationException($"User with ID {userId} not found");
             }
 
-            var tenants = await _unitOfWork.Value.UserTenants.GetUserAccessibleTenantsAsync(userId, cancellationToken);
-            var userTenants = await _unitOfWork.Value.UserTenants.GetUserTenantsAsync(userId, cancellationToken);
+            var tenants = await _unitOfWork.UserTenants.GetUserAccessibleTenantsAsync(userId, cancellationToken);
+            var userTenants = await _unitOfWork.UserTenants.GetUserTenantsAsync(userId, cancellationToken);
 
             return new UserWithTenantsDto
             {
@@ -144,7 +145,7 @@ public class UserService : IUserService
         _logger.LogInformation("Starting bulk creation of {UserCount} users", userList.Count);
 
         // Manual transaction control for more complex scenarios
-        await _unitOfWork.Value.BeginTransactionAsync(cancellationToken: cancellationToken);
+        await _unitOfWork.BeginTransactionAsync(cancellationToken: cancellationToken);
 
         try
         {
@@ -153,9 +154,9 @@ public class UserService : IUserService
             foreach (var user in userList)
             {
                 // Check email doesn't exist
-                var emailExists = await _unitOfWork.Value.Users.EmailExistsAsync(user.Email,
-                    _unitOfWork.Value.Connection,
-                    _unitOfWork.Value.Transaction, cancellationToken);
+                var emailExists = await _unitOfWork.Users.EmailExistsAsync(user.Email,
+                    _unitOfWork.Connection,
+                    _unitOfWork.Transaction, cancellationToken);
                 if (emailExists)
                 {
                     _logger.LogWarning("Skipping user {Email} - already exists", user.Email);
@@ -163,8 +164,8 @@ public class UserService : IUserService
                 }
 
                 // Create user
-                var userId = await _unitOfWork.Value.Users.InsertAsync(user, _unitOfWork.Value.Connection,
-                    _unitOfWork.Value.Transaction,
+                var userId = await _unitOfWork.Users.InsertAsync(user, _unitOfWork.Connection,
+                    _unitOfWork.Transaction,
                     cancellationToken);
                 createdUserIds.Add(userId);
 
@@ -177,63 +178,89 @@ public class UserService : IUserService
                     IsActive = true,
                     JoinedAt = _dateTimeProvider.Value.CurrentUtcTime
                 };
-                await _unitOfWork.Value.UserTenants.AddUserToTenantAsync(userTenant, cancellationToken);
+                await _unitOfWork.UserTenants.AddUserToTenantAsync(userTenant, cancellationToken);
             }
 
-            await _unitOfWork.Value.CommitAsync(cancellationToken);
+            await _unitOfWork.CommitAsync(cancellationToken);
             _logger.LogInformation("Successfully created {CreatedCount} users out of {TotalCount}",
                 createdUserIds.Count, userList.Count);
         }
         catch (Exception ex)
         {
-            await _unitOfWork.Value.RollbackAsync(cancellationToken);
+            await _unitOfWork.RollbackAsync(cancellationToken);
             _logger.LogError(ex, "Failed to bulk create users. Transaction rolled back.");
             throw;
         }
     }
 
-    public Task<IEnumerable<User>> GetUsersByTenantIdAsync(Guid tenantId, int page, int limit,
-        CancellationToken cancellationToken)
+    public Task<(int, IEnumerable<User>)> GetUsersByTenantIdAsync(Guid tenantId, int page, int limit,
+        string? searchString, CancellationToken cancellationToken)
     {
-        return _unitOfWork.Value.Users.GetByTenantIdAsync(tenantId, page, limit, cancellationToken);
+        return _unitOfWork.Users.GetByTenantIdAsync(tenantId, page, limit, searchString, cancellationToken);
     }
 
-    public async Task<Result<User>> GetUserAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken)
+    public async Task<Result<UserResponse>> GetUserAsync(Guid userId, Guid tenantId,
+        CancellationToken cancellationToken)
     {
-        var user = await _unitOfWork.Value.Users.GetByIdAsync(userId, cancellationToken);
-
-        if (user == null)
+        return await _unitOfWork.ExecuteInTransactionAsync<Result<UserResponse>>(async (connection, transaction) =>
         {
-            return Result<User>.Failure("User not found", ErrorType.NotFound);
-        }
+            var user = await _unitOfWork.Users.GetByIdAsync(userId, connection, transaction, cancellationToken);
 
-        var isMember = await _unitOfWork.Value.UserTenants.IsUserMemberOfTenantAsync(userId, tenantId);
+            if (user == null)
+            {
+                return Result<UserResponse>.Failure("User not found", ErrorType.NotFound);
+            }
 
-        if (!isMember)
-        {
-            return Result<User>.Failure("User is not a member of the specified tenant", ErrorType.Forbidden);
-        }
+            var isMember = await _unitOfWork.UserTenants.IsUserMemberOfTenantAsync(userId, tenantId);
 
-        return user;
+            if (!isMember)
+            {
+                return Result<UserResponse>.Failure("User is not a member of the specified tenant",
+                    ErrorType.Forbidden);
+            }
+
+            var userRoles = await _unitOfWork.UserRoles.GetByUserIdAsync(userId, tenantId, connection, transaction,
+                cancellationToken);
+
+            var userResponse = new UserResponse
+            {
+                Id = user.Id,
+                Email = user.Email,
+                FirstName = user.FirstName,
+                LastName = user.LastName,
+                PhoneNumber = user.PhoneNumber,
+                IsEmailConfirmed = user.IsEmailConfirmed,
+                CreatedAt = user.CreatedAt,
+                FullName = user.FullName,
+                IsLocked = user.IsGloballyLocked,
+                Roles = userRoles.Select(x => new UserRoleResponse
+                {
+                    RoleId = x.roleId,
+                    RoleName = x.roleName
+                })
+            };
+
+            return userResponse;
+        });
     }
 
     public async Task<Result<User>> UpdateUserAsync(Guid id, UpdateUserRequest request, Guid tenantId,
         CancellationToken cancellationToken)
     {
-        var user = await _unitOfWork.Value.Users.GetByIdAsync(id, cancellationToken);
+        var user = await _unitOfWork.Users.GetByIdAsync(id, cancellationToken);
         if (user == null)
         {
             return Result<User>.Failure("User not found", ErrorType.NotFound);
         }
 
-        var isMember = await _unitOfWork.Value.UserTenants.IsUserMemberOfTenantAsync(id, tenantId, cancellationToken);
+        var isMember = await _unitOfWork.UserTenants.IsUserMemberOfTenantAsync(id, tenantId, cancellationToken);
 
         if (!isMember)
         {
             return Result<User>.Failure("User not found in current tenant", ErrorType.NotFound);
         }
 
-        var existingUser = await _unitOfWork.Value.Users.GetByEmailAsync(user.Email, cancellationToken);
+        var existingUser = await _unitOfWork.Users.GetByEmailAsync(user.Email, cancellationToken);
         if (existingUser != null && existingUser.Id != id)
         {
             return Result<User>.Failure("Email already exists", ErrorType.Conflict);
@@ -246,7 +273,7 @@ public class UserService : IUserService
         user.IsEmailConfirmed = request.IsEmailConfirmed;
         user.IsGloballyLocked = request.IsLocked;
         user.UpdatedAt = _dateTimeProvider.Value.CurrentUtcTime;
-        var isUpdated = await _unitOfWork.Value.Users.UpdateAsync(user);
+        var isUpdated = await _unitOfWork.Users.UpdateAsync(user);
 
         return !isUpdated ? Result<User>.Failure("Failed to update user", ErrorType.InternalServerError) : user;
     }
@@ -258,7 +285,7 @@ public class UserService : IUserService
             throw new ArgumentException("User ID cannot be empty", nameof(userId));
         }
 
-        return _unitOfWork.Value.Users.GetByIdAsync(userId, cancellationToken);
+        return _unitOfWork.Users.GetByIdAsync(userId, cancellationToken);
     }
 
     public Task<User?> GetByEmailAsync(string email, CancellationToken cancellationToken)
@@ -268,7 +295,7 @@ public class UserService : IUserService
             throw new ArgumentException("Email cannot be null or empty", nameof(email));
         }
 
-        return _unitOfWork.Value.Users.GetByEmailAsync(email, cancellationToken);
+        return _unitOfWork.Users.GetByEmailAsync(email, cancellationToken);
     }
 
     public Task<bool> EmailExistsAsync(string email, CancellationToken cancellationToken)
@@ -278,12 +305,12 @@ public class UserService : IUserService
             throw new ArgumentException("Email cannot be null or empty", nameof(email));
         }
 
-        return _unitOfWork.Value.Users.EmailExistsAsync(email, cancellationToken);
+        return _unitOfWork.Users.EmailExistsAsync(email, cancellationToken);
     }
 
     public async Task<Result<bool>> DeleteUserAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken)
     {
-        return await _unitOfWork.Value.ExecuteInTransactionAsync(async (connection, transaction) =>
+        return await _unitOfWork.ExecuteInTransactionAsync(async (connection, transaction) =>
         {
             var result =
                 await UserExistsAndIsMemberOfTenantAsync(userId, tenantId, cancellationToken: cancellationToken);
@@ -293,11 +320,11 @@ public class UserService : IUserService
                 return result;
             }
 
-            await _unitOfWork.Value.UserClaims.DeleteByUserIdAsync(userId, tenantId, connection, transaction,
+            await _unitOfWork.UserClaims.DeleteByUserIdAsync(userId, tenantId, connection, transaction,
                 cancellationToken);
-            await _unitOfWork.Value.UserRoles.DeleteByUserIdAsync(userId, tenantId, connection, transaction,
+            await _unitOfWork.UserRoles.DeleteByUserIdAsync(userId, tenantId, connection, transaction,
                 cancellationToken);
-            await _unitOfWork.Value.UserTenants.RemoveUserFromTenantAsync(userId, tenantId, connection, transaction,
+            await _unitOfWork.UserTenants.RemoveUserFromTenantAsync(userId, tenantId, connection, transaction,
                 cancellationToken);
 
             return true;
@@ -325,7 +352,7 @@ public class UserService : IUserService
                 TenantId = tenantId
             };
 
-            var exists = await _unitOfWork.Value.UserRoles.ExistsAsync(userId, roleId, tenantId, cancellationToken);
+            var exists = await _unitOfWork.UserRoles.ExistsAsync(userId, roleId, tenantId, cancellationToken);
             if (exists)
             {
                 _logger.LogWarning("User {UserId} already has role {RoleId} in tenant {TenantId}", userId, roleId,
@@ -336,14 +363,14 @@ public class UserService : IUserService
             roles.Add(userRole);
         }
 
-        await _unitOfWork.Value.UserRoles.CreateRangeAsync(roles);
+        await _unitOfWork.UserRoles.CreateRangeAsync(roles);
         return true;
     }
 
     public Task<Result<bool>> RemoveRoleFromUserAsync(Guid userId, Guid tenantId, ICollection<Guid> roleIds,
         CancellationToken cancellationToken)
     {
-        return _unitOfWork.Value.ExecuteInTransactionAsync(async (connection, transaction) =>
+        return _unitOfWork.ExecuteInTransactionAsync(async (connection, transaction) =>
         {
             var result = await UserExistsAndIsMemberOfTenantAsync(userId, tenantId, connection, transaction,
                 cancellationToken);
@@ -353,22 +380,23 @@ public class UserService : IUserService
                 return result;
             }
 
-            await _unitOfWork.Value.UserRoles.DeleteRangeAsync(userId, tenantId, roleIds);
+            await _unitOfWork.UserRoles.DeleteRangeAsync(userId, tenantId, roleIds);
 
             return true;
         }, cancellationToken: cancellationToken);
     }
 
-    public async Task<Result<bool>> InviteUserAsync(string email, Guid tenantId, CancellationToken cancellationToken = default)
+    public async Task<Result<bool>> InviteUserAsync(string email, Guid tenantId,
+        CancellationToken cancellationToken = default)
     {
-        var user = await _unitOfWork.Value.Users.GetByEmailAsync(email, cancellationToken);
+        var user = await _unitOfWork.Users.GetByEmailAsync(email, cancellationToken);
         if (user == null)
         {
             return Result<bool>.Failure("User not found", ErrorType.NotFound);
         }
 
         var isMember =
-            await _unitOfWork.Value.UserTenants.IsUserMemberOfTenantAsync(user.Id, tenantId, cancellationToken);
+            await _unitOfWork.UserTenants.IsUserMemberOfTenantAsync(user.Id, tenantId, cancellationToken);
         if (isMember)
         {
             return Result<bool>.Failure("User is already a member of the specified tenant", ErrorType.Conflict);
@@ -384,27 +412,27 @@ public class UserService : IUserService
             InvitedBy = null // Set this to the user who sent the invite if needed
         };
 
-        await _unitOfWork.Value.UserTenants.AddUserToTenantAsync(userTenant, cancellationToken);
+        await _unitOfWork.UserTenants.AddUserToTenantAsync(userTenant, cancellationToken);
         return true;
     }
 
     public Task<bool> IsUserMemberOfTenantAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken)
     {
-        return _unitOfWork.Value.UserTenants.IsUserMemberOfTenantAsync(userId, tenantId, cancellationToken);
+        return _unitOfWork.UserTenants.IsUserMemberOfTenantAsync(userId, tenantId, cancellationToken);
     }
 
     private async Task<Result<bool>> UserExistsAndIsMemberOfTenantAsync(Guid userId, Guid tenantId,
         IDbConnection? connection = null,
         IDbTransaction? transaction = null, CancellationToken cancellationToken = default)
     {
-        var userExists = await _unitOfWork.Value.Users.ExistsAsync(userId, connection, transaction, cancellationToken);
+        var userExists = await _unitOfWork.Users.ExistsAsync(userId, connection, transaction, cancellationToken);
         if (!userExists)
         {
             return Result<bool>.Failure("User does not exist", ErrorType.NotFound);
         }
 
         var isMember =
-            await _unitOfWork.Value.UserTenants.IsUserMemberOfTenantAsync(userId, tenantId, cancellationToken);
+            await _unitOfWork.UserTenants.IsUserMemberOfTenantAsync(userId, tenantId, cancellationToken);
 
         return !isMember
             ? Result<bool>.Failure("User is not a member of the specified tenant", ErrorType.Forbidden)

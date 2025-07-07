@@ -1,4 +1,4 @@
-namespace Acm.Application.DataTransferObjects;
+namespace Acm.Application.DataTransferObjects.Response;
 
 public record TenantResponse
 {

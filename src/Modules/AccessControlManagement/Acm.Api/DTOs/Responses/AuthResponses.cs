@@ -17,21 +17,7 @@ public class UserInfo
     public required ICollection<string> Permissions { get; set; }
 }
 
-public class UserResponse
-{
-    public required Guid Id { get; set; }
-    public required string Email { get; set; }
-    public required string FirstName { get; set; }
-    public required string LastName { get; set; }
-    public required string FullName { get; set; }
-    public string? PhoneNumber { get; set; }
-    public required bool IsEmailConfirmed { get; set; }
-    public required bool IsLocked { get; set; }
-    public DateTime? LockoutEnd { get; set; }
-    public DateTime? LastLoginAt { get; set; }
-    public required DateTime CreatedAt { get; set; }
-    public ICollection<string> Roles { get; set; } = [];
-}
+
 
 public class RoleResponse
 {

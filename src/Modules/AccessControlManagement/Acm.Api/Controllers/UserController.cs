@@ -2,6 +2,7 @@ using System.Globalization;
 using Acm.Api.DTOs.Requests;
 using Acm.Api.DTOs.Responses;
 using Acm.Application.DataTransferObjects.Request;
+using Acm.Application.DataTransferObjects.Response;
 using Acm.Application.Services;
 using Acm.Domain.Entities;
 using Acm.Infrastructure.Authorization.Attributes;
@@ -44,15 +45,15 @@ public class UserController : JsonApiControllerBase
 
     [HttpGet]
     [RequirePermission(PermissionConstants.UsersView)]
-    public async Task<IActionResult> GetUsers(
-        [FromQuery, BindRequired] PaginationQueryParameter pagination)
+    public async Task<IActionResult> GetUsers([FromQuery, BindRequired] PaginationQueryParameter pagination,
+        [FromQuery] string? searchString = null)
     {
         try
         {
-            var users = await _userService.GetUsersByTenantIdAsync(GetTenantId(), pagination.Page, pagination.Limit,
-                HttpContext.RequestAborted);
+            var (totalCount, usersList) = await _userService.GetUsersByTenantIdAsync(
+                GetTenantId(), pagination.Page, pagination.Limit, searchString, HttpContext.RequestAborted);
 
-            var responses = users.Select(user => new UserResponse
+            var responses = usersList.Select(user => new UserResponse
                 {
                     Id = user.Id,
                     Email = user.Email,
@@ -68,7 +69,17 @@ public class UserController : JsonApiControllerBase
                 })
                 .ToList();
 
-            return Ok(ApiResponse<IEnumerable<UserResponse>>.SuccessResult(responses));
+            var totalPages = checked((int)Math.Ceiling((double)totalCount / pagination.Limit));
+
+            var result = new
+            {
+                TotalCount = totalCount,
+                CurrentPage = pagination.Page,
+                TotalPages = totalPages,
+                Users = responses
+            };
+
+            return Ok(ApiResponse<object>.SuccessResult(result));
         }
         catch (Exception)
         {
@@ -85,21 +96,8 @@ public class UserController : JsonApiControllerBase
 
         var result = await _userService.GetUserAsync(id, tenantId, HttpContext.RequestAborted);
 
-        return FromResult(result, user => Ok(
-            ApiResponse<UserResponse>.SuccessResult(new UserResponse
-            {
-                Id = user.Id,
-                Email = user.Email,
-                FirstName = user.FirstName,
-                LastName = user.LastName,
-                FullName = user.FullName,
-                PhoneNumber = user.PhoneNumber,
-                IsEmailConfirmed = user.IsEmailConfirmed,
-                IsLocked = user.IsGloballyLocked,
-                LockoutEnd = user.GlobalLockoutEnd,
-                LastLoginAt = user.LastLoginAt,
-                CreatedAt = user.CreatedAt
-            })));
+        return FromResult(result, userResponse => Ok(
+            ApiResponse<UserResponse>.SuccessResult(userResponse)));
     }
 
     [HttpPost]
@@ -123,7 +121,7 @@ public class UserController : JsonApiControllerBase
         };
 
         var result = await _userService.CreateUserWithTenantAsync(user, tenantId, request.RoleId,
-                HttpContext.RequestAborted);
+            HttpContext.RequestAborted);
 
         return FromResult(result, createdUser => CreatedAtAction(nameof(GetUser), new { id = createdUser.Id },
             ApiResponse<UserResponse>.SuccessResult(new UserResponse()

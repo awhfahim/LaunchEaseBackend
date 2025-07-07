@@ -94,4 +94,9 @@ public class RoleService : IRoleService
             return (false, "An error occurred while assigning permissions.");
         }
     }
+
+    public Task<IEnumerable<Role>> GetRolesByTenantIdAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        return _roleRepository.Value.GetByTenantIdAsync(tenantId, cancellationToken);
+    }
 }

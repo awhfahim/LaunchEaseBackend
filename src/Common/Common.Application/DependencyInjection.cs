@@ -7,7 +7,7 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddCommonApplicationServices(this IServiceCollection services)
     {
-        services.AddScoped(typeof(LazyService<>), typeof(LazyService<>));
+        services.AddTransient(typeof(LazyService<>), typeof(LazyService<>));
         return services;
     }
 }

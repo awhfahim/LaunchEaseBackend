@@ -16,17 +16,19 @@ public class UserRoleRepository : IUserRoleRepository
         _connectionFactory = connectionFactory;
     }
 
-    public async Task<IEnumerable<UserRole>> GetByUserIdAsync(Guid userId,
+    public async Task<IEnumerable<(Guid roleId, string roleName)>> GetByUserIdAsync(Guid userId, Guid tenantId,
+        IDbConnection connection, IDbTransaction? transaction = null,
         CancellationToken cancellationToken = default)
     {
-        await using var connection = await _connectionFactory.OpenConnectionAsync();
-
         const string sql = @"
-            SELECT id, user_id, role_id, tenant_id
-            FROM user_roles 
-            WHERE user_id = @UserId";
+            SELECT role_id, r.name
+            FROM user_roles ur 
+            JOIN roles r on ur.role_id = r.id
+            WHERE user_id = @UserId and ur.tenant_id = @TenantId
+        ";
 
-        return await connection.QueryAsync<UserRole>(sql, new { UserId = userId });
+        return await connection.QueryAsync<(Guid roleId, string roleName)>(sql,
+            new { UserId = userId, TenantId = tenantId }, transaction);
     }
 
     public async Task<IEnumerable<UserRole>> GetByRoleIdAsync(Guid roleId,
@@ -70,7 +72,7 @@ public class UserRoleRepository : IUserRoleRepository
             const string sql = @"
                 INSERT INTO user_roles (id, user_id, role_id, tenant_id)
                 VALUES (@Id, @UserId, @RoleId, @TenantId)";
-            
+
             await connection.ExecuteAsync(sql, userRole, transaction);
             return userRole.Id;
         }
@@ -78,10 +80,6 @@ public class UserRoleRepository : IUserRoleRepository
         {
             if (shouldDispose && connection is IAsyncDisposable asyncDisposable)
                 await asyncDisposable.DisposeAsync();
-            else if (connection is IDisposable disposable)
-            {
-                disposable.Dispose();
-            }
         }
     }
 
@@ -90,7 +88,7 @@ public class UserRoleRepository : IUserRoleRepository
 
     public Task<Guid> CreateAsync(UserRole userRole, IDbConnection connection, IDbTransaction transaction)
         => CreateAsyncInternal(userRole, connection, transaction);
-    
+
     public async Task CreateRangeAsync(IEnumerable<UserRole> userRoles,
         CancellationToken cancellationToken = default)
     {
@@ -149,10 +147,6 @@ public class UserRoleRepository : IUserRoleRepository
         {
             if (shouldDispose && connection is IAsyncDisposable asyncDisposable)
                 await asyncDisposable.DisposeAsync();
-            else if (connection is IDisposable disposable)
-            {
-                disposable.Dispose();
-            }
         }
     }
 
@@ -185,10 +179,6 @@ public class UserRoleRepository : IUserRoleRepository
         {
             if (shouldDispose && connection is IAsyncDisposable asyncDisposable)
                 await asyncDisposable.DisposeAsync();
-            else if (connection is IDisposable disposable)
-            {
-                disposable.Dispose();
-            }
         }
     }
 

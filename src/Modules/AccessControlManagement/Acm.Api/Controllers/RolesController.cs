@@ -19,7 +19,6 @@ public class RolesController : JsonApiControllerBase
 {
     private readonly IRoleRepository _roleRepository;
     private readonly IRoleClaimRepository _roleClaimRepository;
-    private readonly IUserRoleRepository _userRoleRepository;
     private readonly IRoleService _roleService;
 
     public RolesController(
@@ -29,7 +28,6 @@ public class RolesController : JsonApiControllerBase
     {
         _roleRepository = roleRepository;
         _roleClaimRepository = roleClaimRepository;
-        _userRoleRepository = userRoleRepository;
         _roleService = roleService;
     }
 
@@ -39,25 +37,8 @@ public class RolesController : JsonApiControllerBase
     {
         try
         {
-            var roles = await _roleRepository.GetByTenantIdAsync(GetTenantId());
-
-            var responses = new List<RoleResponse>();
-            foreach (var role in roles)
-            {
-                var claims = await _roleClaimRepository.GetClaimsForRoleAsync(role.Id);
-                var permissions = claims.Where(c => c.Type == "permission").Select(c => c.Value).ToList();
-
-                responses.Add(new RoleResponse
-                {
-                    Id = role.Id,
-                    Name = role.Name,
-                    Description = role.Description,
-                    CreatedAt = role.CreatedAt,
-                    Permissions = permissions
-                });
-            }
-
-            return Ok(ApiResponse<IEnumerable<RoleResponse>>.SuccessResult(responses));
+            var result = await _roleService.GetRolesByTenantIdAsync(GetTenantId(), HttpContext.RequestAborted);
+            return Ok(ApiResponse<IEnumerable<Role>>.SuccessResult(result));
         }
         catch (Exception ex)
         {

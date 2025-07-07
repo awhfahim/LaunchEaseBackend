@@ -1,4 +1,5 @@
 using Acm.Application.DataTransferObjects.Request;
+using Acm.Application.DataTransferObjects.Response;
 using Acm.Domain.Entities;
 using Common.Application.Misc;
 
@@ -16,10 +17,10 @@ public interface IUserService
 
     Task BulkCreateUsersAsync(IEnumerable<User> users, Guid tenantId, CancellationToken cancellationToken = default);
 
-    Task<IEnumerable<User>> GetUsersByTenantIdAsync(Guid tenantId, int page, int limit,
+    Task<(int, IEnumerable<User>)> GetUsersByTenantIdAsync(Guid tenantId, int page, int limit, string? searchString,
         CancellationToken cancellationToken);
 
-    Task<Result<User>> GetUserAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken);
+    Task<Result<UserResponse>> GetUserAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken);
 
     Task<Result<User>> UpdateUserAsync(Guid id, UpdateUserRequest request, Guid tenantId,
         CancellationToken cancellationToken);

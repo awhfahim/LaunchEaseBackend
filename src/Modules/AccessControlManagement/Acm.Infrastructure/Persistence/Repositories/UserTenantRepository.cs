@@ -97,7 +97,7 @@ public class UserTenantRepository : IUserTenantRepository
         {
             const string sql = @"
                 UPDATE user_tenants 
-                SET is_active = false, left_at = @LeftAt
+                SET is_active = false, left_at = current_timestamp
                 WHERE user_id = @UserId AND tenant_id = @TenantId";
 
             await connection.ExecuteAsync(sql, new { UserId = userId, TenantId = tenantId }, transaction);

@@ -5,13 +5,10 @@ using Acm.Domain.Entities;
 using Common.Application.Data;
 using Common.Infrastructure.Persistence.Repositories;
 using Dapper;
+using MailKit.Search;
 
 namespace Acm.Infrastructure.Persistence.Repositories;
 
-/// <summary>
-/// Enhanced User Repository implementation extending the generic repository
-/// Provides both basic CRUD operations and custom user-specific methods
-/// </summary>
 [Table("users")]
 public class EnhancedUserRepository : DapperGenericRepository<User, Guid>, IUserRepository
 {
@@ -76,30 +73,54 @@ public class EnhancedUserRepository : DapperGenericRepository<User, Guid>, IUser
         return await connection.QueryFirstOrDefaultAsync<User>(sql, new { Email = email }, transaction);
     }
 
-    public async Task<IEnumerable<User>> GetByTenantIdAsync(Guid tenantId, int page, int limit,
+    public async Task<(int, IEnumerable<User>)> GetByTenantIdAsync(Guid tenantId, int page, int limit,
+        string? searchString = null,
         CancellationToken cancellationToken = default)
     {
         await using var connection = await ConnectionFactory.OpenConnectionAsync(cancellationToken);
-        return await GetByTenantIdAsync(tenantId, page, limit, connection, null, cancellationToken);
+        return await GetByTenantIdAsync(tenantId, page, limit, searchString, connection, null, cancellationToken);
     }
 
-    public async Task<IEnumerable<User>> GetByTenantIdAsync(Guid tenantId, int page, int limit,
-        IDbConnection connection, IDbTransaction? transaction = null, CancellationToken cancellationToken = default)
+    public async Task<(int, IEnumerable<User>)> GetByTenantIdAsync(Guid tenantId, int page, int limit,
+        string? searchString, IDbConnection connection, IDbTransaction? transaction = null,
+        CancellationToken cancellationToken = default)
     {
         var offset = (page - 1) * limit;
         const string sql = @"
+            SELECT COUNT(1) AS TotalCount
+            FROM users u
+            INNER JOIN user_tenants ut ON u.id = ut.user_id
+            WHERE ut.tenant_id = @TenantId
+              AND ut.is_active
+              AND (
+                @SearchQuery IS NULL
+                OR u.email ILIKE ('%' || @SearchQuery || '%')
+                OR (u.first_name || ' ' || u.last_name) ILIKE ('%' || @SearchQuery || '%')
+              );
+            
             SELECT u.id, u.email, u.first_name, u.last_name, u.password_hash, u.security_stamp,
                    u.is_email_confirmed, u.is_globally_locked, u.global_lockout_end, 
                    u.global_access_failed_count, u.last_login_at, u.phone_number, 
                    u.is_phone_number_confirmed, u.created_at, u.updated_at
             FROM users u
             INNER JOIN user_tenants ut ON u.id = ut.user_id
-            WHERE ut.tenant_id = @TenantId AND ut.is_active = true
+            WHERE ut.tenant_id = @TenantId
+              AND ut.is_active
+              AND (
+                @SearchQuery IS NULL
+                OR u.email ILIKE ('%' || @SearchQuery || '%')
+                OR (u.first_name || ' ' || u.last_name) ILIKE ('%' || @SearchQuery || '%')
+              )
             ORDER BY u.created_at DESC
-            LIMIT @Limit OFFSET @Offset";
+            LIMIT @Limit OFFSET @Offset;";
 
-        return await connection.QueryAsync<User>(sql, new { TenantId = tenantId, Limit = limit, Offset = offset },
+        var result = await connection.QueryMultipleAsync(sql,
+            new { TenantId = tenantId, Limit = limit, Offset = offset, SearchQuery = searchString },
             transaction);
+
+        var totalCount = await result.ReadSingleAsync<int>();
+        var users = await result.ReadAsync<User>();
+        return (totalCount, users);
     }
 
     public async Task<bool> EmailExistsAsync(string email, CancellationToken cancellationToken = default)

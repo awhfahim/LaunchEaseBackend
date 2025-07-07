@@ -6,7 +6,8 @@ namespace Acm.Application.Repositories;
 
 public interface IUserRoleRepository
 {
-    Task<IEnumerable<UserRole>> GetByUserIdAsync(Guid userId, CancellationToken cancellationToken = default);
+    Task<IEnumerable<(Guid roleId, string roleName)>> GetByUserIdAsync(Guid userId, Guid tenantId, IDbConnection connection,
+        IDbTransaction? transaction = null, CancellationToken cancellationToken = default);
 
     Task<IEnumerable<UserRole>> GetByUserIdAsync(Guid userId, Guid tenantId,
         CancellationToken cancellationToken = default);

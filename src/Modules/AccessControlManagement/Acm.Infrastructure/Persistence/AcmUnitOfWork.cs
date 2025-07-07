@@ -1,6 +1,7 @@
 using Acm.Application.Interfaces;
 using Acm.Application.Repositories;
 using Common.Application.Data;
+using Common.Application.Services;
 using Common.Infrastructure.Persistence;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -11,31 +12,30 @@ namespace Acm.Infrastructure.Persistence;
 /// </summary>
 public class AcmUnitOfWork : DapperUnitOfWork, IAcmUnitOfWork
 {
-
-    private readonly Lazy<IUserRepository> _users;
-    private readonly Lazy<IRoleRepository> _roles;
-    private readonly Lazy<IUserRoleRepository> _userRoles;
-    private readonly Lazy<ITenantRepository> _tenants;
-    private readonly Lazy<IUserTenantRepository> _userTenants;
-    private readonly Lazy<IUserClaimRepository> _userClaims;
-    private readonly Lazy<IRoleClaimRepository> _roleClaims;
-    private readonly Lazy<IRoleManagementRepository> _roleManagement;
-    private readonly Lazy<IPermissionManagementRepository> _permissionManagement;
+    private readonly LazyService<IUserRepository> _users;
+    private readonly LazyService<IRoleRepository> _roles;
+    private readonly LazyService<IUserRoleRepository> _userRoles;
+    private readonly LazyService<ITenantRepository> _tenants;
+    private readonly LazyService<IUserTenantRepository> _userTenants;
+    private readonly LazyService<IUserClaimRepository> _userClaims;
+    private readonly LazyService<IRoleClaimRepository> _roleClaims;
+    private readonly LazyService<IRoleManagementRepository> _roleManagement;
+    private readonly LazyService<IPermissionManagementRepository> _permissionManagement;
 
     public AcmUnitOfWork(
         IDbConnectionFactory connectionFactory,
         IServiceProvider serviceProvider)
         : base(connectionFactory, serviceProvider)
     {
-        _users = new Lazy<IUserRepository>(serviceProvider.GetRequiredService<IUserRepository>);
-        _roles = new Lazy<IRoleRepository>(serviceProvider.GetRequiredService<IRoleRepository>);
-        _userRoles = new Lazy<IUserRoleRepository>(serviceProvider.GetRequiredService<IUserRoleRepository>);
-        _tenants = new Lazy<ITenantRepository>(serviceProvider.GetRequiredService<ITenantRepository>);
-        _userTenants = new Lazy<IUserTenantRepository>(serviceProvider.GetRequiredService<IUserTenantRepository>);
-        _userClaims = new Lazy<IUserClaimRepository>(serviceProvider.GetRequiredService<IUserClaimRepository>);
-        _roleClaims = new Lazy<IRoleClaimRepository>(serviceProvider.GetRequiredService<IRoleClaimRepository>);
-        _roleManagement = new Lazy<IRoleManagementRepository>(serviceProvider.GetRequiredService<IRoleManagementRepository>);
-        _permissionManagement = new Lazy<IPermissionManagementRepository>(serviceProvider.GetRequiredService<IPermissionManagementRepository>);
+        _users = new LazyService<IUserRepository>(serviceProvider);
+        _roles = new LazyService<IRoleRepository>(serviceProvider);
+        _userRoles = new LazyService<IUserRoleRepository>(serviceProvider);
+        _tenants = new LazyService<ITenantRepository>(serviceProvider);
+        _userTenants = new LazyService<IUserTenantRepository>(serviceProvider);
+        _userClaims = new LazyService<IUserClaimRepository>(serviceProvider);
+        _roleClaims = new LazyService<IRoleClaimRepository>(serviceProvider);
+        _roleManagement = new LazyService<IRoleManagementRepository>(serviceProvider);
+        _permissionManagement = new LazyService<IPermissionManagementRepository>(serviceProvider);
     }
 
     public IUserRepository Users => _users.Value;

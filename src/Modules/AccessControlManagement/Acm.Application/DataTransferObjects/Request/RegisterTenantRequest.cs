@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace Acm.Application.DataTransferObjects;
+namespace Acm.Application.DataTransferObjects.Request;
 
 public record RegisterTenantRequest
 {

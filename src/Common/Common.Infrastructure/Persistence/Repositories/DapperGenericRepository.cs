@@ -168,10 +168,6 @@ public abstract class DapperGenericRepository<TEntity, TKey> : IGenericRepositor
             {
                 await asyncDisposable.DisposeAsync();
             }
-            else if (connection is IDisposable disposable)
-            {
-                disposable.Dispose();
-            }
         }
     }
 
