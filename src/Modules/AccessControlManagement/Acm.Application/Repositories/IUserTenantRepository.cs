@@ -18,4 +18,6 @@ public interface IUserTenantRepository
 
     Task RemoveUserFromTenantAsync(Guid userId, Guid tenantId, IDbConnection connection,
         IDbTransaction transaction, CancellationToken cancellationToken = default);
+    
+    Task<bool> UpdateUserTenantAsync(UserTenant userTenant, CancellationToken cancellationToken = default);
 }

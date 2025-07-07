@@ -401,6 +401,15 @@ public class UserService : IUserService
         {
             return Result<bool>.Failure("User is already a member of the specified tenant", ErrorType.Conflict);
         }
+        
+        var userTenantExists = await _unitOfWork.UserTenants.GetUserTenantAsync(user.Id, tenantId, cancellationToken);
+
+        if (userTenantExists is not null && !userTenantExists.IsActive)
+        {
+            userTenantExists.IsActive = true;
+            userTenantExists.JoinedAt = _dateTimeProvider.Value.CurrentUtcTime;
+            return await _unitOfWork.UserTenants.UpdateUserTenantAsync(userTenantExists, cancellationToken);
+        }
 
         var userTenant = new UserTenant
         {
@@ -419,6 +428,11 @@ public class UserService : IUserService
     public Task<bool> IsUserMemberOfTenantAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken)
     {
         return _unitOfWork.UserTenants.IsUserMemberOfTenantAsync(userId, tenantId, cancellationToken);
+    }
+
+    public Task<IEnumerable<string>> GetExistingEmailsAsync(string email, CancellationToken ct)
+    {
+        return _unitOfWork.Users.GetExistingEmailsAsync(email, ct);
     }
 
     private async Task<Result<bool>> UserExistsAndIsMemberOfTenantAsync(Guid userId, Guid tenantId,

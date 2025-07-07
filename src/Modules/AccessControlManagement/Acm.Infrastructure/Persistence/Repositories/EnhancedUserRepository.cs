@@ -5,7 +5,6 @@ using Acm.Domain.Entities;
 using Common.Application.Data;
 using Common.Infrastructure.Persistence.Repositories;
 using Dapper;
-using MailKit.Search;
 
 namespace Acm.Infrastructure.Persistence.Repositories;
 
@@ -79,6 +78,21 @@ public class EnhancedUserRepository : DapperGenericRepository<User, Guid>, IUser
     {
         await using var connection = await ConnectionFactory.OpenConnectionAsync(cancellationToken);
         return await GetByTenantIdAsync(tenantId, page, limit, searchString, connection, null, cancellationToken);
+    }
+
+    public async Task<IEnumerable<string>> GetExistingEmailsAsync(string email, CancellationToken ct)
+    {
+        var sql = @"
+            SELECT u.email
+            FROM users u
+            WHERE u.is_globally_locked = false
+              AND u.email ilike '%' || @SearchString || '%'
+              OR (u.email % @SearchString)";
+
+        await using var connection = await ConnectionFactory.OpenConnectionAsync();
+
+        return await connection.QueryAsync<string>(new CommandDefinition(sql, new { SearchString = email },
+            cancellationToken: ct));
     }
 
     public async Task<(int, IEnumerable<User>)> GetByTenantIdAsync(Guid tenantId, int page, int limit,

@@ -44,4 +44,6 @@ public interface IUserRepository : IGenericRepository<User, Guid>
 
     Task<(int, IEnumerable<User>)> GetByTenantIdAsync(Guid tenantId, int page, int limit, string? searchString = null,
         CancellationToken cancellationToken = default);
+
+    Task<IEnumerable<string>> GetExistingEmailsAsync(string email, CancellationToken ct);
 }

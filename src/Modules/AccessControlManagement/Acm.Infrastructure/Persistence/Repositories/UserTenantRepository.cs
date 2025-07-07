@@ -78,7 +78,7 @@ public class UserTenantRepository : IUserTenantRepository
         await connection.ExecuteAsync(sql, userTenant, transaction);
         return userTenant.Id;
     }
-    
+
     private async Task RemoveUserFromTenantAsyncInternal(
         Guid userId,
         Guid tenantId,
@@ -112,10 +112,28 @@ public class UserTenantRepository : IUserTenantRepository
     public Task RemoveUserFromTenantAsync(Guid userId, Guid tenantId,
         CancellationToken cancellationToken = default)
         => RemoveUserFromTenantAsyncInternal(userId, tenantId, null, null, cancellationToken);
-    
+
     public Task RemoveUserFromTenantAsync(Guid userId, Guid tenantId, IDbConnection connection,
         IDbTransaction transaction, CancellationToken cancellationToken = default)
         => RemoveUserFromTenantAsyncInternal(userId, tenantId, connection, transaction, cancellationToken);
+
+    public async Task<bool> UpdateUserTenantAsync(UserTenant userTenant, CancellationToken cancellationToken = default)
+    {
+        var sql = @"
+            UPDATE user_tenants 
+            SET is_active = @IsActive, left_at = @LeftAt, invited_by = @InvitedBy
+            WHERE id = @Id AND tenant_id = @TenantId";
+
+        await using var connection = await _connectionFactory.OpenConnectionAsync();
+        var affectedRow = await connection.ExecuteAsync(new CommandDefinition(sql,
+            new
+            {
+                Id = userTenant.Id, TenantId = userTenant.TenantId, IsActive = userTenant.IsActive,
+                LeftAt = userTenant.LeftAt, invitedBy = userTenant.InvitedBy
+            }, cancellationToken: cancellationToken));
+
+        return affectedRow > 0;
+    }
 
     public async Task<bool> IsUserMemberOfTenantAsync(Guid userId, Guid tenantId,
         CancellationToken cancellationToken = default)

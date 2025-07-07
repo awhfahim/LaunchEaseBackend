@@ -39,4 +39,5 @@ public interface IUserService
         CancellationToken cancellationToken = default);
     
     Task<bool> IsUserMemberOfTenantAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken);
+    Task<IEnumerable<string>> GetExistingEmailsAsync(string email, CancellationToken ct);
 }

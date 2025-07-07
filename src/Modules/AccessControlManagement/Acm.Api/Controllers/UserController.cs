@@ -270,4 +270,12 @@ public class UserController : JsonApiControllerBase
         var result = await _userService.GetUserWithTenantsAsync(userId, HttpContext.RequestAborted);
         return Ok(ApiResponse<object>.SuccessResult(result, "User tenants fetched successfully"));
     }
+
+    [HttpGet("search-existing-emails")]
+    [RequirePermission(PermissionConstants.UsersView)]
+    public async Task<IActionResult> GetExistingEmails([FromQuery, BindRequired] string email)
+    {
+        var results = await _userService.GetExistingEmailsAsync(email, HttpContext.RequestAborted);
+        return Ok(ApiResponse<IEnumerable<string>>.SuccessResult(results, "Existing emails fetched successfully"));
+    }
 }
