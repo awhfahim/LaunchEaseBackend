@@ -94,6 +94,12 @@ CREATE INDEX IF NOT EXISTS idx_user_claims_tenant_id ON user_claims(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_user_claims_type_value ON user_claims(claim_type, claim_value);
 CREATE INDEX IF NOT EXISTS idx_role_claims_role_id ON role_claims(role_id);
 CREATE INDEX IF NOT EXISTS idx_role_claims_type_value ON role_claims(claim_type, claim_value);
+CREATE INDEX idx_users_email_trgm ON users USING gin (email gin_trgm_ops);
+CREATE INDEX idx_users_fullname_trgm ON users USING gin ((first_name || ' ' || last_name) gin_trgm_ops);
+CREATE INDEX idx_users_full_name ON users ((COALESCE(first_name || ' ' || last_name, '')));
+
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
 
 -- Migration script to update existing data (if you have existing data)
 -- Run this after creating the new tables
