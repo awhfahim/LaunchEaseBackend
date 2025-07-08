@@ -32,7 +32,8 @@ public class RolesController : JsonApiControllerBase
     }
 
     [HttpGet]
-    [RequirePermission(PermissionConstants.RolesAndPermissionView)]
+    [RequirePermission(PermissionConstants.RolesAndPermissionView, PermissionConstants.UsersCreate,
+        PermissionConstants.UsersEdit, PermissionConstants.UsersView)]
     public async Task<IActionResult> GetRoles()
     {
         try
@@ -199,7 +200,7 @@ public class RolesController : JsonApiControllerBase
             {
                 return BadRequest("No permissions provided to assign");
             }
-            
+
             var result = await _roleService.AssignPermissionsAsync(id, GetTenantId(), request.Permissions,
                 HttpContext.RequestAborted);
 

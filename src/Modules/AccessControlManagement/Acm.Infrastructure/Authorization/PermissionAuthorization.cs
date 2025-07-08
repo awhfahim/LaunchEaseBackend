@@ -4,11 +4,13 @@ namespace Acm.Infrastructure.Authorization;
 
 public class PermissionRequirement : IAuthorizationRequirement
 {
-    public string Permission { get; }
+    public string[] Permissions { get; }
 
-    public PermissionRequirement(string permission)
+    public PermissionRequirement(string permissionString)
     {
-        Permission = permission;
+        Permissions = permissionString.Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .Select(p => p.Trim())
+            .ToArray();
     }
 }
 
@@ -19,19 +21,15 @@ public class PermissionAuthorizationHandler : AuthorizationHandler<PermissionReq
         var userPermissions = context.User.FindAll("permission")
             .Select(c => c.Value)
             .ToList();
-
-        // Check if user has the exact permission
-        if (userPermissions.Contains(requirement.Permission))
+        
+        foreach (var requiredPermission in requirement.Permissions)
         {
-            context.Succeed(requirement);
-            return Task.CompletedTask;
-        }
-
-        // Check hierarchical permissions (Business Owner > System Admin > Tenant permissions)
-        if (HasHierarchicalPermission(userPermissions, requirement.Permission))
-        {
-            context.Succeed(requirement);
-            return Task.CompletedTask;
+            if (userPermissions.Contains(requiredPermission) || 
+                HasHierarchicalPermission(userPermissions, requiredPermission))
+            {
+                context.Succeed(requirement);
+                return Task.CompletedTask;
+            }
         }
 
         return Task.CompletedTask;
@@ -39,23 +37,19 @@ public class PermissionAuthorizationHandler : AuthorizationHandler<PermissionReq
 
     private static bool HasHierarchicalPermission(IList<string> userPermissions, string requiredPermission)
     {
-        // Business Owner has access to everything
         if (userPermissions.Contains(PermissionConstants.BusinessOwner))
         {
             return true;
         }
-
-        // System Admin has access to all system and tenant operations
+        
         if (userPermissions.Contains(PermissionConstants.SystemAdmin))
         {
-            // System admin can access all tenant-scoped permissions and global permissions
             if (IsSystemOrGlobalPermission(requiredPermission) || IsTenantScopedPermission(requiredPermission))
             {
                 return true;
             }
         }
 
-        // Cross-tenant access allows global operations
         if (userPermissions.Contains(PermissionConstants.CrossTenantAccess))
         {
             if (IsGlobalPermission(requiredPermission))
@@ -79,7 +73,6 @@ public class PermissionAuthorizationHandler : AuthorizationHandler<PermissionReq
 
     private static bool IsTenantScopedPermission(string permission)
     {
-        // Tenant-scoped permissions don't have "global." or "system." prefix
         return !permission.StartsWith("global.") && 
                !permission.StartsWith("system.") && 
                !permission.StartsWith("business.") &&

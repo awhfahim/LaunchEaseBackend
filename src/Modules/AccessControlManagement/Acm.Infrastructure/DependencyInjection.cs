@@ -52,6 +52,7 @@ public static class DependencyInjection
         services.TryAddScoped<IPermissionManagementRepository, PermissionManagementRepository>();
 
         services.AddJwtAuth(configuration);
+        services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
 
         return services;
     }

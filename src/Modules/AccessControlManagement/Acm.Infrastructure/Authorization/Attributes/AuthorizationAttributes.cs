@@ -5,8 +5,8 @@ namespace Acm.Infrastructure.Authorization.Attributes;
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = true)]
 public sealed class RequirePermissionAttribute : AuthorizeAttribute
 {
-    public RequirePermissionAttribute(string permission)
-        : base($"Permission.{permission}")
+    public RequirePermissionAttribute(params string[] permissions)
+        : base($"Permission.{string.Join(",", permissions)}")
     {
     }
 }
