@@ -1,4 +1,5 @@
 using Acm.Application.Repositories;
+using Acm.Domain.DTOs;
 using Acm.Domain.Entities;
 using Common.Application.Data;
 using Common.Application.Providers;
@@ -100,7 +101,7 @@ public class RoleService : IRoleService
         }
     }
 
-    public Task<IEnumerable<Role>> GetRolesByTenantIdAsync(Guid tenantId, CancellationToken cancellationToken)
+    public Task<IEnumerable<RoleResponse>> GetRolesByTenantIdAsync(Guid tenantId, CancellationToken cancellationToken)
     {
         return _roleRepository.Value.GetByTenantIdAsync(tenantId, cancellationToken);
     }

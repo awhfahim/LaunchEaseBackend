@@ -1,0 +1,2 @@
+1. Add Redis Cache to the project.
+2. Seed Admin User.

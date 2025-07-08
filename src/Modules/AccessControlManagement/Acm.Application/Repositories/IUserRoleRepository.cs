@@ -6,7 +6,8 @@ namespace Acm.Application.Repositories;
 
 public interface IUserRoleRepository
 {
-    Task<IEnumerable<(Guid roleId, string roleName)>> GetByUserIdAsync(Guid userId, Guid tenantId, IDbConnection connection,
+    Task<IEnumerable<(Guid roleId, string roleName)>> GetByUserIdAsync(Guid userId, Guid tenantId,
+        IDbConnection connection,
         IDbTransaction? transaction = null, CancellationToken cancellationToken = default);
 
     Task<IEnumerable<UserRole>> GetByUserIdAsync(Guid userId, Guid tenantId,
@@ -40,6 +41,8 @@ public interface IUserRoleRepository
 
     Task<Guid> CreateAsync(UserRole userRole, IDbConnection connection, IDbTransaction transaction);
 
-    Task CreateRangeAsync(IEnumerable<UserRole> userRoles, CancellationToken cancellationToken = default);
+    Task CreateRangeAsync(IEnumerable<UserRole> userRoles, IDbConnection connection, IDbTransaction transaction,
+        CancellationToken cancellationToken = default);
+
     Task DeleteRangeAsync(Guid userId, Guid tenantId, ICollection<Guid> roleIds);
 }

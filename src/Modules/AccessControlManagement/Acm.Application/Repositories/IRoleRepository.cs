@@ -1,4 +1,5 @@
 using System.Data.Common;
+using Acm.Domain.DTOs;
 using Acm.Domain.Entities;
 
 namespace Acm.Application.Repositories;
@@ -7,7 +8,7 @@ public interface IRoleRepository
 {
     Task<Role?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
     Task<Role?> GetByNameAsync(string name, Guid tenantId, CancellationToken cancellationToken = default);
-    Task<IEnumerable<Role>> GetByTenantIdAsync(Guid tenantId, CancellationToken cancellationToken = default);
+    Task<IEnumerable<RoleResponse>> GetByTenantIdAsync(Guid tenantId, CancellationToken cancellationToken = default);
 
     Task<Guid> CreateAsync(Role role,
         CancellationToken cancellationToken = default);

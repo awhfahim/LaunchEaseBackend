@@ -334,37 +334,35 @@ public class UserService : IUserService
     public async Task<Result<bool>> AssignRoleToUserAsync(Guid userId, ICollection<Guid> roleIds, Guid tenantId,
         CancellationToken cancellationToken)
     {
-        var result = await UserExistsAndIsMemberOfTenantAsync(userId, tenantId, cancellationToken: cancellationToken);
 
-        if (!result.IsSuccess)
+        return await _unitOfWork.ExecuteInTransactionAsync<Result<bool>>(async (connection, transaction) =>
         {
-            return result;
-        }
+            var result = await UserExistsAndIsMemberOfTenantAsync(userId, tenantId, cancellationToken: cancellationToken);
 
-        ICollection<UserRole> roles = [];
-        foreach (var roleId in roleIds)
-        {
-            var userRole = new UserRole
+            if (!result.IsSuccess)
             {
-                Id = _guidProvider.SortableGuid(),
-                UserId = userId,
-                RoleId = roleId,
-                TenantId = tenantId
-            };
-
-            var exists = await _unitOfWork.UserRoles.ExistsAsync(userId, roleId, tenantId, cancellationToken);
-            if (exists)
-            {
-                _logger.LogWarning("User {UserId} already has role {RoleId} in tenant {TenantId}", userId, roleId,
-                    tenantId);
-                continue;
+                return result;
             }
 
-            roles.Add(userRole);
-        }
+            await _unitOfWork.UserRoles.DeleteByUserIdAsync(userId, tenantId, connection, transaction);
 
-        await _unitOfWork.UserRoles.CreateRangeAsync(roles);
-        return true;
+            ICollection<UserRole> roles = [];
+            foreach (var roleId in roleIds)
+            {
+                var userRole = new UserRole
+                {
+                    Id = _guidProvider.SortableGuid(),
+                    UserId = userId,
+                    RoleId = roleId,
+                    TenantId = tenantId
+                };
+
+                roles.Add(userRole);
+            }
+
+            await _unitOfWork.UserRoles.CreateRangeAsync(roles, connection, transaction);
+            return true;
+        });
     }
 
     public Task<Result<bool>> RemoveRoleFromUserAsync(Guid userId, Guid tenantId, ICollection<Guid> roleIds,

@@ -89,16 +89,15 @@ public class UserRoleRepository : IUserRoleRepository
     public Task<Guid> CreateAsync(UserRole userRole, IDbConnection connection, IDbTransaction transaction)
         => CreateAsyncInternal(userRole, connection, transaction);
 
-    public async Task CreateRangeAsync(IEnumerable<UserRole> userRoles,
+    public async Task CreateRangeAsync(IEnumerable<UserRole> userRoles, IDbConnection connection,
+        IDbTransaction transaction,
         CancellationToken cancellationToken = default)
     {
-        await using var connection = await _connectionFactory.OpenConnectionAsync();
-
         const string sql = @"
             INSERT INTO user_roles (id, user_id, role_id, tenant_id)
             VALUES (@Id, @UserId, @RoleId, @TenantId)";
 
-        await connection.ExecuteAsync(sql, userRoles);
+        await connection.ExecuteAsync(sql, userRoles, transaction);
     }
 
     public async Task DeleteAsync(Guid userId, Guid roleId, CancellationToken cancellationToken = default)

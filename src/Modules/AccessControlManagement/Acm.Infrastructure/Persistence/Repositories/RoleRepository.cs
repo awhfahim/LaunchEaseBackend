@@ -1,5 +1,7 @@
 using System.Data.Common;
+using System.Text.Json;
 using Acm.Application.Repositories;
+using Acm.Domain.DTOs;
 using Acm.Domain.Entities;
 using Common.Application.Data;
 using Dapper;
@@ -9,7 +11,7 @@ namespace Acm.Infrastructure.Persistence.Repositories;
 public class RoleRepository : IRoleRepository
 {
     private const string DeleteRoleSql = "DELETE FROM roles WHERE id = @Id";
-    
+
     private readonly IDbConnectionFactory _connectionFactory;
 
     public RoleRepository(IDbConnectionFactory connectionFactory)
@@ -41,18 +43,39 @@ public class RoleRepository : IRoleRepository
         return await connection.QueryFirstOrDefaultAsync<Role>(sql, new { Name = name, TenantId = tenantId });
     }
 
-    public async Task<IEnumerable<Role>> GetByTenantIdAsync(Guid tenantId,
+    public async Task<IEnumerable<RoleResponse>> GetByTenantIdAsync(Guid tenantId,
         CancellationToken cancellationToken = default)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync();
 
         const string sql = @"
-            SELECT id, tenant_id, name, description, created_at, updated_at
-            FROM roles 
+            SELECT r.id, tenant_id, name, r.description, r.created_at, r.updated_at,
+                   json_agg(json_build_object('claimId', rc.master_claim_id, 'claim', mc.claim_value)) AS Claims
+            FROM roles r
+            LEFT JOIN role_claims rc ON r.id = rc.role_id
+            LEFT JOIN master_claims mc ON rc.master_claim_id = mc.id
             WHERE tenant_id = @TenantId
-            ORDER BY name";
+            GROUP BY r.id";
 
-        return await connection.QueryAsync<Role>(sql, new { TenantId = tenantId });
+        var result = await connection.QueryAsync<RoleResponse>(sql, new { TenantId = tenantId });
+
+        var byTenantIdAsync = result as RoleResponse[] ?? result.ToArray();
+        foreach (var roleResponse in byTenantIdAsync)
+        {
+            if (!string.IsNullOrEmpty(roleResponse.Claims))
+            {
+                roleResponse.Permissions =
+                    JsonSerializer.Deserialize<List<RoleClaimResponse>>(roleResponse.Claims, new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true
+                    }) ?? 
+                    [];
+
+                roleResponse.Claims = string.Empty;
+            }
+        }
+        
+        return byTenantIdAsync;
     }
 
     public async Task<Guid> CreateAsync(Role role,

@@ -9,26 +9,29 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using Common.HttpApi.Controllers;
 using Common.HttpApi.DTOs;
+using Microsoft.Extensions.Logging;
 
 namespace Acm.Api.Controllers;
 
 [Route("api/roles")]
 [Authorize]
 [RequireTenant]
-public class RolesController : JsonApiControllerBase
+public class RoleController : JsonApiControllerBase
 {
     private readonly IRoleRepository _roleRepository;
     private readonly IRoleClaimRepository _roleClaimRepository;
     private readonly IRoleService _roleService;
+    private readonly ILogger<RoleController> _logger;
 
-    public RolesController(
+    public RoleController(
         IRoleRepository roleRepository,
         IRoleClaimRepository roleClaimRepository,
-        IUserRoleRepository userRoleRepository, IRoleService roleService)
+        IRoleService roleService, ILogger<RoleController> logger)
     {
         _roleRepository = roleRepository;
         _roleClaimRepository = roleClaimRepository;
         _roleService = roleService;
+        _logger = logger;
     }
 
     [HttpGet]
@@ -39,12 +42,13 @@ public class RolesController : JsonApiControllerBase
         try
         {
             var result = await _roleService.GetRolesByTenantIdAsync(GetTenantId(), HttpContext.RequestAborted);
-            return Ok(ApiResponse<IEnumerable<Role>>.SuccessResult(result));
+            return Ok(ApiResponse<IEnumerable<Acm.Domain.DTOs.RoleResponse>>.SuccessResult(result));
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, ex.Message);
             return StatusCode(500,
-                ApiResponse<IEnumerable<RoleResponse>>.ErrorResult("An error occurred while fetching roles"));
+                ApiResponse<IEnumerable<Acm.Domain.DTOs.RoleResponse>>.ErrorResult("An error occurred while fetching roles"));
         }
     }
 
