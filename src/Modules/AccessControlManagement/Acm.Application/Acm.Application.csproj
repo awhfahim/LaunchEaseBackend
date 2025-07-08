@@ -15,4 +15,9 @@
       <ProjectReference Include="..\Acm.Domain\Acm.Domain.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+      <Folder Include="Features\" />
+      <Folder Include="Services\RoleServices\" />
+    </ItemGroup>
+
 </Project>

@@ -1,4 +1,4 @@
-namespace Acm.Application.Services
+namespace Acm.Application.Services.Implementations
 {
     // Supporting types
     public enum RoleTemplateType

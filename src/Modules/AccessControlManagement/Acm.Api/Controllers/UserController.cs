@@ -4,6 +4,7 @@ using Acm.Api.DTOs.Responses;
 using Acm.Application.DataTransferObjects.Request;
 using Acm.Application.DataTransferObjects.Response;
 using Acm.Application.Services;
+using Acm.Application.Services.Interfaces;
 using Acm.Domain.Entities;
 using Acm.Infrastructure.Authorization.Attributes;
 using Acm.Infrastructure.Authorization;
@@ -24,21 +25,12 @@ namespace Acm.Api.Controllers;
 [RequireTenant]
 public class UserController : JsonApiControllerBase
 {
-    private readonly IAuthenticationService _authenticationService;
-    private readonly IDateTimeProvider _dateTimeProvider;
-    private readonly IGuidProvider _guidProvider;
     private readonly IUserService _userService;
     private readonly LazyService<ILogger<UserController>> _logger;
 
     public UserController(
-        IAuthenticationService authenticationService,
-        IDateTimeProvider dateTimeProvider,
-        IGuidProvider guidProvider,
         IUserService userService, LazyService<ILogger<UserController>> logger)
     {
-        _authenticationService = authenticationService;
-        _dateTimeProvider = dateTimeProvider;
-        _guidProvider = guidProvider;
         _userService = userService;
         _logger = logger;
     }
@@ -105,22 +97,7 @@ public class UserController : JsonApiControllerBase
     public async Task<IActionResult> CreateUser([FromBody] CreateUserRequest request)
     {
         var tenantId = GetTenantId();
-        var hashedPassword = await _authenticationService.HashPasswordAsync(request.Password);
-
-        var user = new User
-        {
-            Id = _guidProvider.SortableGuid(),
-            Email = request.Email,
-            FirstName = request.FirstName,
-            LastName = request.LastName,
-            PasswordHash = hashedPassword,
-            SecurityStamp = _dateTimeProvider.CurrentUtcTime.ToString(CultureInfo.InvariantCulture),
-            PhoneNumber = request.PhoneNumber,
-            IsEmailConfirmed = false, //Todo: Email Verification Required
-            CreatedAt = _dateTimeProvider.CurrentUtcTime
-        };
-
-        var result = await _userService.CreateUserWithTenantAsync(user, tenantId, request.RoleId,
+        var result = await _userService.CreateUserWithTenantAsync(request, tenantId, request.RoleId,
             HttpContext.RequestAborted);
 
         return FromResult(result, createdUser => CreatedAtAction(nameof(GetUser), new { id = createdUser.Id },

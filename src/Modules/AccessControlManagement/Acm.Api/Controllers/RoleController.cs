@@ -1,7 +1,7 @@
 using Acm.Api.DTOs.Requests;
 using Acm.Api.DTOs.Responses;
 using Acm.Application.Repositories;
-using Acm.Application.Services.RoleServices;
+using Acm.Application.Services.Interfaces;
 using Acm.Domain.Entities;
 using Acm.Infrastructure.Authorization.Attributes;
 using Acm.Infrastructure.Authorization;
@@ -214,69 +214,5 @@ public class RoleController : JsonApiControllerBase
         {
             return StatusCode(500, ApiResponse<object>.ErrorResult("An error occurred while assigning permissions"));
         }
-    }
-
-    [HttpGet("permissions")]
-    [RequirePermission(PermissionConstants.RolesAndPermissionView)]
-    public IActionResult GetAvailablePermissions()
-    {
-        //Todo: This should ideally be fetched from a configuration or database
-        var permissions = new[]
-        {
-            // User Management (Tenant-scoped)
-            PermissionConstants.UsersView,
-            PermissionConstants.UsersCreate,
-            PermissionConstants.UsersEdit,
-            PermissionConstants.UsersDelete,
-
-            // Role Management (Tenant-scoped)
-            PermissionConstants.RolesAndPermissionView,
-            PermissionConstants.RolesAndPermissionCreate,
-            PermissionConstants.RolesAndPermissionEdit,
-            PermissionConstants.RolesAndPermissionDelete,
-
-            // Tenant Settings (Own tenant only)
-            PermissionConstants.TenantSettingsView,
-            PermissionConstants.TenantSettingsEdit,
-
-            // Dashboard (Tenant-scoped)
-            PermissionConstants.DashboardView,
-
-            // Authentication & Authorization (Tenant-scoped)
-            PermissionConstants.AuthenticationView,
-            PermissionConstants.AuthenticationEdit,
-            PermissionConstants.AuthorizationView,
-            PermissionConstants.AuthorizationEdit,
-
-            // SYSTEM-WIDE PERMISSIONS
-            // Global Tenant Management
-            PermissionConstants.GlobalTenantsView,
-            PermissionConstants.GlobalTenantsCreate,
-            PermissionConstants.GlobalTenantsEdit,
-            PermissionConstants.GlobalTenantsDelete,
-
-            // Global User Management (Cross-tenant)
-            PermissionConstants.GlobalUsersView,
-            PermissionConstants.GlobalUsersCreate,
-            PermissionConstants.GlobalUsersEdit,
-            PermissionConstants.GlobalUsersDelete,
-
-            // Global Role Management (Cross-tenant)
-            PermissionConstants.GlobalRolesView,
-            PermissionConstants.GlobalRolesCreate,
-            PermissionConstants.GlobalRolesEdit,
-            PermissionConstants.GlobalRolesDelete,
-
-            // System Administration
-            PermissionConstants.SystemAdmin,
-            PermissionConstants.SystemDashboard,
-            PermissionConstants.SystemLogs,
-            PermissionConstants.SystemConfiguration,
-
-            // BUSINESS OWNER PERMISSIONS
-            PermissionConstants.BusinessOwner,
-            PermissionConstants.CrossTenantAccess
-        };
-        return Ok(ApiResponse<IEnumerable<string>>.SuccessResult(permissions));
     }
 }

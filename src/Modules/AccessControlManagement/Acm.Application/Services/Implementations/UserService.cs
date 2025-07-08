@@ -1,14 +1,18 @@
 using System.Data;
+using System.Globalization;
+using Acm.Application.DataTransferObjects;
 using Acm.Application.DataTransferObjects.Request;
 using Acm.Application.DataTransferObjects.Response;
 using Acm.Application.Interfaces;
+using Acm.Application.Repositories;
+using Acm.Application.Services.Interfaces;
 using Acm.Domain.Entities;
 using Common.Application.Misc;
 using Common.Application.Providers;
 using Common.Application.Services;
 using Microsoft.Extensions.Logging;
 
-namespace Acm.Application.Services;
+namespace Acm.Application.Services.Implementations;
 
 public class UserService : IUserService
 {
@@ -16,23 +20,48 @@ public class UserService : IUserService
     private readonly ILogger<UserService> _logger;
     private readonly IGuidProvider _guidProvider;
     private readonly LazyService<IDateTimeProvider> _dateTimeProvider;
+    private readonly ICryptographyService _cryptographyService;
+    private readonly LazyService<IUserRoleRepository> _userRoleRepository;
+    private readonly LazyService<IUserClaimRepository> _userClaimRepository;
+    private readonly LazyService<IRoleClaimRepository> _roleClaimRepository;
 
     public UserService(IAcmUnitOfWork unitOfWork,
         ILogger<UserService> logger,
         IGuidProvider guidProvider,
-        LazyService<IDateTimeProvider> dateTimeProvider)
+        LazyService<IDateTimeProvider> dateTimeProvider, ICryptographyService cryptographyService,
+        LazyService<IUserRoleRepository> userRoleRepository, LazyService<IUserClaimRepository> userClaimRepository,
+        LazyService<IRoleClaimRepository> roleClaimRepository)
     {
         _unitOfWork = unitOfWork;
         _logger = logger;
         _guidProvider = guidProvider;
         _dateTimeProvider = dateTimeProvider;
+        _cryptographyService = cryptographyService;
+        _userRoleRepository = userRoleRepository;
+        _userClaimRepository = userClaimRepository;
+        _roleClaimRepository = roleClaimRepository;
     }
 
-    public async Task<Result<User>> CreateUserWithTenantAsync(User user, Guid tenantId, Guid roleId,
+    public async Task<Result<User>> CreateUserWithTenantAsync(CreateUserRequest request, Guid tenantId, Guid roleId,
         CancellationToken cancellationToken = default)
     {
         return await _unitOfWork.ExecuteInTransactionAsync(async (connection, transaction) =>
         {
+            var hashedPassword = await _cryptographyService.HashPasswordAsync(request.Password);
+
+            var user = new User
+            {
+                Id = _guidProvider.SortableGuid(),
+                Email = request.Email,
+                FirstName = request.FirstName,
+                LastName = request.LastName,
+                PasswordHash = hashedPassword,
+                SecurityStamp = _dateTimeProvider.Value.CurrentUtcTime.ToString(CultureInfo.InvariantCulture),
+                PhoneNumber = request.PhoneNumber,
+                IsEmailConfirmed = false,
+                CreatedAt = _dateTimeProvider.Value.CurrentUtcTime
+            };
+
             var emailExists =
                 await _unitOfWork.Users.EmailExistsAsync(user.Email, connection, transaction,
                     cancellationToken);
@@ -334,10 +363,10 @@ public class UserService : IUserService
     public async Task<Result<bool>> AssignRoleToUserAsync(Guid userId, ICollection<Guid> roleIds, Guid tenantId,
         CancellationToken cancellationToken)
     {
-
         return await _unitOfWork.ExecuteInTransactionAsync<Result<bool>>(async (connection, transaction) =>
         {
-            var result = await UserExistsAndIsMemberOfTenantAsync(userId, tenantId, cancellationToken: cancellationToken);
+            var result =
+                await UserExistsAndIsMemberOfTenantAsync(userId, tenantId, cancellationToken: cancellationToken);
 
             if (!result.IsSuccess)
             {
@@ -399,7 +428,7 @@ public class UserService : IUserService
         {
             return Result<bool>.Failure("User is already a member of the specified tenant", ErrorType.Conflict);
         }
-        
+
         var userTenantExists = await _unitOfWork.UserTenants.GetUserTenantAsync(user.Id, tenantId, cancellationToken);
 
         if (userTenantExists is not null && !userTenantExists.IsActive)
@@ -433,6 +462,75 @@ public class UserService : IUserService
         return _unitOfWork.Users.GetExistingEmailsAsync(email, ct);
     }
 
+    public async Task<Result<UserInfoDto>> GetRefreshTokenAsync(Guid userId, Guid tenantId,
+        CancellationToken cancellationToken)
+    {
+        var user = await GetByIdAsync(userId, cancellationToken);
+        if (user == null)
+        {
+            return Result<UserInfoDto>.Failure("User not found", ErrorType.Unauthorized);
+        }
+
+        var roles =  _userRoleRepository.Value.GetRoleNamesForUserAsync(user.Id, cancellationToken);
+        var userClaims =  _userClaimRepository.Value.GetClaimsForUserAsync(user.Id, cancellationToken);
+        var roleClaims =  _roleClaimRepository.Value.GetClaimsForUserRolesAsync(user.Id, cancellationToken);
+        
+        await Task.WhenAll(roles, userClaims, roleClaims);
+
+        var permissions = userClaims.Result.Where(c => c.Type == "permission")
+            .Union(roleClaims.Result.Where(c => c.Type == "permission"))
+            .Select(c => c.Value)
+            .Distinct()
+            .ToList();
+        
+        return new UserInfoDto
+        {
+            Id = userId,
+            Email = user.Email,
+            FirstName = user.FirstName,
+            LastName = user.LastName,
+            FullName = user.FullName,
+            TenantId = tenantId,
+            Roles = roles.Result.ToList(),
+            Permissions = permissions,
+        }; 
+    }
+
+    public async Task<Result<UserInfoDto>> GetUserInfoAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken)
+    {
+        var user = await GetByIdAsync(userId, cancellationToken);
+        if (user == null)
+        {
+            return Result<UserInfoDto>.Failure("User not found", ErrorType.Unauthorized);
+        }
+        
+        var roles = _userRoleRepository.Value.GetRoleNamesForUserAsync(userId, tenantId, cancellationToken);
+        var userClaims = _userClaimRepository.Value.GetClaimsForUserAsync(userId, tenantId, cancellationToken);
+        var roleClaims = _roleClaimRepository.Value.GetClaimsForUserRolesAsync(userId, tenantId, cancellationToken);
+
+        await Task.WhenAll(roles, userClaims, roleClaims);
+
+        var permissions = userClaims.Result.Where(c => c.Type == "permission")
+            .Union(roleClaims.Result.Where(c => c.Type == "permission"))
+            .Select(c => c.Value)
+            .Distinct()
+            .ToList();
+
+        var userInfo = new UserInfoDto()
+        {
+            Id = user.Id,
+            Email = user.Email,
+            FirstName = user.FirstName,
+            LastName = user.LastName,
+            FullName = user.FullName,
+            TenantId = tenantId,
+            Roles = roles.Result.ToList(),
+            Permissions = permissions
+        };
+
+        return userInfo;
+    }
+
     private async Task<Result<bool>> UserExistsAndIsMemberOfTenantAsync(Guid userId, Guid tenantId,
         IDbConnection? connection = null,
         IDbTransaction? transaction = null, CancellationToken cancellationToken = default)
@@ -450,14 +548,4 @@ public class UserService : IUserService
             ? Result<bool>.Failure("User is not a member of the specified tenant", ErrorType.Forbidden)
             : true;
     }
-}
-
-/// <summary>
-/// DTO for user with tenants data
-/// </summary>
-public class UserWithTenantsDto
-{
-    public User User { get; set; } = null!;
-    public List<Tenant> Tenants { get; set; } = new();
-    public List<UserTenant> UserTenantRelationships { get; set; } = new();
 }

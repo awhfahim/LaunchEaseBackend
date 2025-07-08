@@ -58,7 +58,7 @@ public static class ServiceCollectionExtensions
     //
     //     return services;
     // }
-    //
+
     // public static async Task<IServiceCollection> SeedAdminUserAsync(this IServiceCollection services,
     //     IConfiguration configuration)
     // {
@@ -67,8 +67,8 @@ public static class ServiceCollectionExtensions
     //
     //     ArgumentNullException.ThrowIfNull(seedData);
     //
-    //     var dbUrl = configuration.GetRequiredSection(AcmConnectionStringOptions.SectionName)
-    //         .GetValue<string>(nameof(AcmConnectionStringOptions.AcmDb));
+    //     var dbUrl = configuration.GetRequiredSection(ConnectionStringOptions.SectionName)
+    //         .GetValue<string>(nameof(ConnectionStringOptions.Db));
     //
     //     var authCryptographyService = new AuthCryptographyService();
     //     var dateTimeProvider = new DateTimeProvider();
@@ -108,7 +108,7 @@ public static class ServiceCollectionExtensions
     //     Console.WriteLine("Super Admin seed done");
     //     return services;
     // }
-    //
+    
     public static async Task<IServiceCollection> SeedPermissionsAsync(this IServiceCollection services,
         IConfiguration configuration)
     {

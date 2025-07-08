@@ -1,13 +1,14 @@
+using Acm.Application.DataTransferObjects;
 using Acm.Application.DataTransferObjects.Request;
 using Acm.Application.DataTransferObjects.Response;
 using Acm.Domain.Entities;
 using Common.Application.Misc;
 
-namespace Acm.Application.Services;
+namespace Acm.Application.Services.Interfaces;
 
 public interface IUserService
 {
-    Task<Result<User>> CreateUserWithTenantAsync(User user, Guid tenantId, Guid roleId,
+    Task<Result<User>> CreateUserWithTenantAsync(CreateUserRequest request, Guid tenantId, Guid roleId,
         CancellationToken cancellationToken = default);
 
     Task UpdateUserSecurityInfoAsync(Guid userId, string newPasswordHash, string newSecurityStamp,
@@ -40,4 +41,7 @@ public interface IUserService
     
     Task<bool> IsUserMemberOfTenantAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken);
     Task<IEnumerable<string>> GetExistingEmailsAsync(string email, CancellationToken ct);
+    
+    Task<Result<UserInfoDto>> GetRefreshTokenAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken);
+    Task<Result<UserInfoDto>> GetUserInfoAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken);
 }

@@ -1,4 +1,5 @@
 using Acm.Application.Repositories;
+using Acm.Application.Services.Interfaces;
 using Acm.Domain.DTOs;
 using Acm.Domain.Entities;
 using Common.Application.Data;
@@ -6,7 +7,7 @@ using Common.Application.Providers;
 using Common.Application.Services;
 using Microsoft.Extensions.Logging;
 
-namespace Acm.Application.Services.RoleServices;
+namespace Acm.Application.Services.Implementations;
 
 public class RoleService : IRoleService
 {

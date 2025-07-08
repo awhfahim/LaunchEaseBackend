@@ -1,7 +1,6 @@
 using Acm.Domain.DTOs;
-using Acm.Domain.Entities;
 
-namespace Acm.Application.Services.RoleServices;
+namespace Acm.Application.Services.Interfaces;
 
 public interface IRoleService
 {

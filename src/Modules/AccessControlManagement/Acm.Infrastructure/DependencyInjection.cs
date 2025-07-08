@@ -2,6 +2,8 @@ using Acm.Application;
 using Acm.Application.Interfaces;
 using Acm.Application.Repositories;
 using Acm.Application.Services;
+using Acm.Application.Services.Implementations;
+using Acm.Application.Services.Interfaces;
 using Acm.Infrastructure.Authorization;
 using Acm.Infrastructure.Authorization.Handlers;
 using Acm.Infrastructure.Extensions;
@@ -36,6 +38,7 @@ public static class DependencyInjection
         services.TryAddScoped<IRoleClaimRepository, RoleClaimRepository>();
         services.TryAddScoped<ITenantRepository, TenantRepository>();
         services.TryAddScoped<IUserTenantRepository, UserTenantRepository>();
+        services.TryAddScoped<ICryptographyService, CryptographyService>();
         
         // Enhanced Unit of Work for ACM
         services.TryAddScoped<IAcmUnitOfWork, AcmUnitOfWork>();

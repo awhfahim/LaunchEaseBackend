@@ -1,12 +1,12 @@
-using Acm.Application.DataTransferObjects;
 using Acm.Application.DataTransferObjects.Request;
 using Acm.Application.DataTransferObjects.Response;
 using Acm.Application.Repositories;
+using Acm.Application.Services.Interfaces;
 using Acm.Domain.Entities;
 using Common.Application.Providers;
 using Microsoft.Extensions.Logging;
 
-namespace Acm.Application.Services;
+namespace Acm.Application.Services.Implementations;
 
 public class TenantService : ITenantService
 {
@@ -15,16 +15,18 @@ public class TenantService : ITenantService
     private readonly IDateTimeProvider _dateTimeProvider;
     private readonly IAuthenticationService _authenticationService;
     private readonly ILogger<TenantService> _logger;
+    private readonly ICryptographyService _cryptographyService;
 
     public TenantService(ITenantRepository tenantRepository, IGuidProvider guidProvider,
         IDateTimeProvider dateTimeProvider, IAuthenticationService authenticationService,
-        ILogger<TenantService> logger)
+        ILogger<TenantService> logger, ICryptographyService cryptographyService)
     {
         _tenantRepository = tenantRepository;
         _guidProvider = guidProvider;
         _dateTimeProvider = dateTimeProvider;
         _authenticationService = authenticationService;
         _logger = logger;
+        _cryptographyService = cryptographyService;
     }
 
     public async Task<TenantResponse?> RegisterTenantAsync(RegisterTenantRequest request,
@@ -54,7 +56,7 @@ public class TenantService : ITenantService
             CreatedAt = _dateTimeProvider.CurrentUtcTime
         };
 
-        var hashedPassword = await _authenticationService.HashPasswordAsync(request.AdminPassword);
+        var hashedPassword = await _cryptographyService.HashPasswordAsync(request.AdminPassword);
         var adminUser = new User
         {
             Id = _guidProvider.SortableGuid(),

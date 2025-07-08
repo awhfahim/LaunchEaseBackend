@@ -3,6 +3,7 @@ using Acm.Application.DataTransferObjects.Request;
 using Acm.Application.DataTransferObjects.Response;
 using Acm.Application.Repositories;
 using Acm.Application.Services;
+using Acm.Application.Services.Interfaces;
 using Acm.Infrastructure.Authorization;
 using Acm.Infrastructure.Authorization.Attributes;
 using Common.HttpApi.Controllers;

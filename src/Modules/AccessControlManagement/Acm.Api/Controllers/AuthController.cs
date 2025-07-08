@@ -2,8 +2,8 @@ using System.Security.Claims;
 using Acm.Api.DTOs.Requests;
 using Acm.Api.DTOs.Responses;
 using Acm.Application;
-using Acm.Application.Services;
-using Acm.Application.Repositories;
+using Acm.Application.DataTransferObjects;
+using Acm.Application.Services.Interfaces;
 using Common.HttpApi.Controllers;
 using Common.HttpApi.DTOs;
 using Microsoft.AspNetCore.Mvc;
@@ -12,31 +12,21 @@ using Microsoft.AspNetCore.Http;
 
 namespace Acm.Api.Controllers;
 
-/// <summary>
-/// Authentication controller implementing secure multi-tenant authentication flow.
-/// JWT tokens are stored in HTTP-only cookies for enhanced security against XSS attacks.
-/// </summary>
 [Route("api/auth")]
 public class AuthController : JsonApiControllerBase
 {
     private readonly IAuthenticationService _authenticationService;
-    private readonly IUserRepository _userRepository;
-    private readonly IUserRoleRepository _userRoleRepository;
-    private readonly IUserClaimRepository _userClaimRepository;
-    private readonly IRoleClaimRepository _roleClaimRepository;
+    private readonly IUserService _userService;
+    private readonly ICryptographyService _cryptographyService;
 
     public AuthController(
         IAuthenticationService authenticationService,
-        IUserRepository userRepository,
-        IUserRoleRepository userRoleRepository,
-        IUserClaimRepository userClaimRepository,
-        IRoleClaimRepository roleClaimRepository)
+        IUserService userService,
+        ICryptographyService cryptographyService)
     {
         _authenticationService = authenticationService;
-        _userRepository = userRepository;
-        _userRoleRepository = userRoleRepository;
-        _userClaimRepository = userClaimRepository;
-        _roleClaimRepository = roleClaimRepository;
+        _userService = userService;
+        _cryptographyService = cryptographyService;
     }
 
     [HttpPost("refresh")]
@@ -45,68 +35,37 @@ public class AuthController : JsonApiControllerBase
     {
         try
         {
-            // Get user ID from claims
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             var tenantIdClaim = User.FindFirst("tenant_id")?.Value;
 
             if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId) ||
                 string.IsNullOrEmpty(tenantIdClaim) || !Guid.TryParse(tenantIdClaim, out var tenantId))
             {
-                return Unauthorized(ApiResponse<LoginResponse>.ErrorResult("Invalid token"));
+                return Unauthorized(ApiResponse<UserInfoDto>.ErrorResult("Invalid token"));
             }
 
-            // Get user details
-            var user = await _userRepository.GetByIdAsync(userId);
-            if (user == null)
-            {
-                return Unauthorized(ApiResponse<LoginResponse>.ErrorResult("User not found"));
-            }
+            var userInfo = await _userService.GetRefreshTokenAsync(userId, tenantId, HttpContext.RequestAborted);
 
-            // Generate new token with fresh claims
             var claims = await _authenticationService.GetUserClaimsAsync(userId);
-            var newToken = await _authenticationService.GenerateJwtTokenAsync(userId, tenantId, claims);
-
-            // Get user roles and permissions
-            var roles = await _userRoleRepository.GetRoleNamesForUserAsync(user.Id);
-            var userClaims = await _userClaimRepository.GetClaimsForUserAsync(user.Id);
-            var roleClaims = await _roleClaimRepository.GetClaimsForUserRolesAsync(user.Id);
-
-            var permissions = userClaims.Where(c => c.Type == "permission")
-                .Union(roleClaims.Where(c => c.Type == "permission"))
-                .Select(c => c.Value)
-                .Distinct()
-                .ToList();
+            var newToken = await _cryptographyService.GenerateJwtTokenAsync(userId, tenantId, claims);
 
             HttpContext.Response.Cookies.Append(AcmAppConstants.AccessTokenCookieKey,
                 newToken, new CookieOptions
                 {
                     HttpOnly = true,
                     Expires = DateTimeOffset.Now.AddMinutes(800),
-                    Secure = true, 
+                    Secure = true,
                     SameSite = SameSiteMode.Strict,
                     Path = "/"
                 });
 
-            var response = new LoginResponse
-            {
-                User = new UserInfo
-                {
-                    Id = user.Id,
-                    Email = user.Email,
-                    FirstName = user.FirstName,
-                    LastName = user.LastName,
-                    FullName = user.FullName,
-                    TenantId = tenantId, // Use the tenant ID from the token
-                    Roles = roles.ToList(),
-                    Permissions = permissions
-                }
-            };
-
-            return Ok(ApiResponse<LoginResponse>.SuccessResult(response, "Token refreshed successfully"));
+            return FromResult(userInfo,
+                dto => Ok(ApiResponse<UserInfoDto>.SuccessResult(dto,
+                    "Token refreshed successfully")));
         }
         catch (Exception)
         {
-            return StatusCode(500, ApiResponse<LoginResponse>.ErrorResult("An error occurred during token refresh"));
+            return StatusCode(500, ApiResponse<UserInfoDto>.ErrorResult("An error occurred during token refresh"));
         }
     }
 
@@ -114,7 +73,6 @@ public class AuthController : JsonApiControllerBase
     [Authorize]
     public IActionResult Logout()
     {
-        // Clear the HTTP-only cookie containing the JWT token
         HttpContext.Response.Cookies.Delete(AcmAppConstants.AccessTokenCookieKey, new CookieOptions
         {
             HttpOnly = true,
@@ -138,44 +96,17 @@ public class AuthController : JsonApiControllerBase
             if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId) ||
                 string.IsNullOrEmpty(tenantIdClaim) || !Guid.TryParse(tenantIdClaim, out var tenantId))
             {
-                return Unauthorized(ApiResponse<UserInfo>.ErrorResult("Invalid token"));
+                return Unauthorized(ApiResponse<UserInfoDto>.ErrorResult("Invalid token"));
             }
 
-            var user = await _userRepository.GetByIdAsync(userId);
-            if (user == null)
-            {
-                return NotFound(ApiResponse<UserInfo>.ErrorResult("User not found"));
-            }
+            var userInfo = await _userService.GetUserInfoAsync(userId, tenantId, HttpContext.RequestAborted);
 
-            // Get user roles and permissions for this tenant
-            var roles = await _userRoleRepository.GetRoleNamesForUserAsync(user.Id, tenantId);
-            var userClaims = await _userClaimRepository.GetClaimsForUserAsync(user.Id, tenantId);
-            var roleClaims = await _roleClaimRepository.GetClaimsForUserRolesAsync(user.Id, tenantId);
-
-            var permissions = userClaims.Where(c => c.Type == "permission")
-                .Union(roleClaims.Where(c => c.Type == "permission"))
-                .Select(c => c.Value)
-                .Distinct()
-                .ToList();
-
-            var userInfo = new UserInfo
-            {
-                Id = user.Id,
-                Email = user.Email,
-                FirstName = user.FirstName,
-                LastName = user.LastName,
-                FullName = user.FullName,
-                TenantId = tenantId, // Use tenant ID from token
-                Roles = roles.ToList(),
-                Permissions = permissions
-            };
-
-            return Ok(ApiResponse<UserInfo>.SuccessResult(userInfo));
+            return FromResult(userInfo, dto => Ok(ApiResponse<UserInfoDto>.SuccessResult(dto)));
         }
         catch (Exception)
         {
             return StatusCode(500,
-                ApiResponse<UserInfo>.ErrorResult("An error occurred while fetching user information"));
+                ApiResponse<UserInfoDto>.ErrorResult("An error occurred while fetching user information"));
         }
     }
 
@@ -199,22 +130,11 @@ public class AuthController : JsonApiControllerBase
                                                                         "Authentication failed"));
             }
 
-            // Get user details
-            var user = await _userRepository.GetByIdAsync(result.UserId!.Value);
+            var user = await _userService.GetByIdAsync(result.UserId!.Value, HttpContext.RequestAborted);
             if (user == null)
             {
                 return BadRequest(ApiResponse<InitialLoginResponse>.ErrorResult("User not found"));
             }
-
-            // Map accessible tenants
-            var tenantResponses = result.AccessibleTenants.Select(t => new TenantInfoResponse
-            {
-                Id = t.Id,
-                Name = t.Name,
-                Slug = t.Slug,
-                LogoUrl = t.LogoUrl,
-                UserRoles = t.UserRoles.ToList()
-            }).ToList();
 
             var response = new InitialLoginResponse
             {
@@ -223,15 +143,22 @@ public class AuthController : JsonApiControllerBase
                 FirstName = user.FirstName,
                 LastName = user.LastName,
                 FullName = user.FullName,
-                AccessibleTenants = tenantResponses
+                AccessibleTenants = result.AccessibleTenants.Select(t => new TenantInfoResponse
+                {
+                    Id = t.Id,
+                    Name = t.Name,
+                    Slug = t.Slug,
+                    LogoUrl = t.LogoUrl,
+                    UserRoles = t.UserRoles.ToList()
+                }).ToList()
             };
-            
+
             HttpContext.Response.Cookies.Append(AcmAppConstants.AccessTokenCookieKey,
                 result.TempToken, new CookieOptions
                 {
                     HttpOnly = true,
                     Expires = DateTimeOffset.Now.AddMinutes(5),
-                    Secure = true, 
+                    Secure = true,
                     SameSite = SameSiteMode.Strict
                 });
 
@@ -261,26 +188,24 @@ public class AuthController : JsonApiControllerBase
                                                                  "Tenant authentication failed"));
             }
 
-            // Get user details
-            var user = await _userRepository.GetByIdAsync(result.UserId!.Value);
+            var user = await _userService.GetByIdAsync(result.UserId!.Value, HttpContext.RequestAborted);
             if (user == null)
             {
                 return BadRequest(ApiResponse<TenantLoginResponse>.ErrorResult("User not found"));
             }
 
-            // Store JWT token in HTTP-only cookie for security
             HttpContext.Response.Cookies.Append(AcmAppConstants.AccessTokenCookieKey,
                 result.Token!, new CookieOptions
                 {
                     HttpOnly = true,
                     Expires = DateTimeOffset.Now.AddMinutes(result.ExpiresIn),
-                    Secure = true, 
+                    Secure = true,
                     SameSite = SameSiteMode.Strict
                 });
 
             var response = new TenantLoginResponse
             {
-                AccessToken = "Token stored in secure cookie", // Don't expose the actual token
+                AccessToken = "Token stored in secure cookie",
                 TokenType = "Bearer",
                 ExpiresIn = (int)result.ExpiresIn,
                 TokenStoredInCookie = true,
@@ -320,7 +245,6 @@ public class AuthController : JsonApiControllerBase
     {
         try
         {
-            // Get user ID from current token
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
             {
@@ -335,27 +259,25 @@ public class AuthController : JsonApiControllerBase
                     ApiResponse<TenantLoginResponse>.ErrorResult(result.ErrorMessage ?? "Tenant switch failed"));
             }
 
-            // Get user details
-            var user = await _userRepository.GetByIdAsync(result.UserId!.Value);
+            var user = await _userService.GetByIdAsync(result.UserId!.Value, HttpContext.RequestAborted);
             if (user == null)
             {
                 return BadRequest(ApiResponse<TenantLoginResponse>.ErrorResult("User not found"));
             }
 
-            // Store JWT token in HTTP-only cookie for security
             HttpContext.Response.Cookies.Append(AcmAppConstants.AccessTokenCookieKey,
                 result.Token!, new CookieOptions
                 {
                     HttpOnly = true,
                     Expires = DateTimeOffset.Now.AddMinutes(result.ExpiresIn),
-                    Secure = true, 
+                    Secure = true,
                     SameSite = SameSiteMode.Strict,
                     Path = "/"
                 });
 
             var response = new TenantLoginResponse
             {
-                AccessToken = "Token stored in secure cookie", // Don't expose the actual token
+                AccessToken = "Token stored in secure cookie",
                 TokenType = "Bearer",
                 ExpiresIn = (int)result.ExpiresIn,
                 TokenStoredInCookie = true,
